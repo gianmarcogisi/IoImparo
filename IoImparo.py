@@ -83,10 +83,18 @@ with tab1:
     
     with col1:
         st.subheader("📥 Carica il Materiale")
-        st.markdown("Carica foto di quaderni o PDF disordinati.")
-        file_input = st.file_uploader("Trascina qui i tuoi appunti", type=['pdf', 'png', 'jpg', 'jpeg'], key="elab")
+        st.markdown("Scegli il tipo di appunti che vuoi caricare:")
+        
+        # IL TRUCCO UX: Il bivio per i telefoni
+        tipo_file = st.radio("Formato:", ["📄 Documento PDF", "📸 Foto del Quaderno"], horizontal=True)
+        
+        # Mostriamo il caricatore giusto in base alla scelta
+        if tipo_file == "📄 Documento PDF":
+            file_input = st.file_uploader("Seleziona il tuo PDF", type=['pdf'], key="elab_pdf")
+        else:
+            file_input = st.file_uploader("Scatta o seleziona una foto", type=['png', 'jpg', 'jpeg'], key="elab_foto")
+            
         bottone_elabora = st.button("Trascrivi, Schematizza & Riassumi 🪄", use_container_width=True)
-
     with col2:
         st.subheader("📄 Il tuo Materiale Pulito")
         if bottone_elabora and file_input is not None:
