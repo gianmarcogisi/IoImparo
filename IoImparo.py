@@ -8,7 +8,6 @@ from reportlab.lib.pagesizes import letter
 import io
 
 # --- 1. SICUREZZA E CONFIGURAZIONE ---
-load_dotenv()
 api_key = os.getenv("GEMINI_API_KEY")
 
 # Nome ufficiale dell'App!
