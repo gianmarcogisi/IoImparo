@@ -144,7 +144,7 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
 ])
 
 with tab1:
-    col1, colw2 = st.columns([1, 2])
+    col1, col2 = st.columns([1, 2])
     with col1:
         st.subheader("📥 Carica Materiale")
         tipo_file = st.radio("Formato:", ["📄 PDF", "📸 Foto"], horizontal=True)
