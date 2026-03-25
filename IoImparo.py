@@ -215,12 +215,40 @@ with tab1:
                     st.session_state.riassunto_pdf = genera_pdf_scaricabile(response.text)
                     
                     try:
+                        # 1. Salvataggio del nuovo appunto
                         supabase.table("appunti_salvati").insert({
                             "user_id": st.session_state.utente_loggato.id,
                             "testo_estratto": st.session_state.testo_pulito_studente
                         }).execute()
                         st.toast("💾 Salvato nel database!", icon="✅")
-                    except Exception as e: st.error(f"Errore DB: {e}")
+                        
+                        # --- 2. SISTEMA DI PULIZIA AUTOMATICA (SALVA-SPAZIO E SALVA-RANK) ---
+                        MAX_APPUNTI_MEMORIA = 25 # Quanti appunti "interi" vogliamo tenere in memoria per utente
+                        
+                        # Chiediamo al DB tutti gli appunti di questo utente, dal più vecchio al più nuovo
+                        res_storico = supabase.table("appunti_salvati").select("id, created_at, testo_estratto").eq("user_id", st.session_state.utente_loggato.id).order("created_at").execute()
+                        
+                        # Se ha superato il limite (es. ha 26 appunti)
+                        if len(res_storico.data) > MAX_APPUNTI_MEMORIA:
+                            # Calcoliamo quanti ne dobbiamo svuotare
+                            appunti_da_svuotare = len(res_storico.data) - MAX_APPUNTI_MEMORIA
+                            
+                            # Prendiamo gli ID dei più vecchi che NON sono già stati archiviati
+                            appunti_vecchi = [x for x in res_storico.data if x['testo_estratto'] != "🗄️ [Contenuto archiviato automaticamente per liberare spazio nel database]"]
+                            
+                            if len(appunti_vecchi) > 0:
+                                ids_da_archiviare = [record['id'] for record in appunti_vecchi[:appunti_da_svuotare]]
+                                
+                                # Svuotiamo il testo per liberare i Megabytes!
+                                for old_id in ids_da_archiviare:
+                                    supabase.table("appunti_salvati").update({
+                                        "testo_estratto": "🗄️ [Contenuto archiviato automaticamente per liberare spazio nel database]"
+                                    }).eq("id", old_id).execute()
+                                
+                                st.toast(f"🧹 Spazio ottimizzato: {len(ids_da_archiviare)} appunti vecchi archiviati!", icon="♻️")
+                                
+                    except Exception as e: 
+                        st.error(f"Errore DB: {e}")
                     
                     st.markdown(response.text)
                     st.balloons()
