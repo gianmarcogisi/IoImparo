@@ -6,9 +6,14 @@ import PyPDF2
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import letter
 import io
+from supabase import create_client, Client
 
 # --- 1. SICUREZZA E CONFIGURAZIONE ---
 api_key = os.getenv("GEMINI_API_KEY")
+# --- CONFIGURAZIONE SUPABASE ---
+supabase_url = st.secrets["https://ofljlrtssnawuzbgfmto.supabase.com"]
+supabase_key = st.secrets["eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9mbGpscnRzc25hd3V6YmdmbXRvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ0Mjk0MzcsImV4cCI6MjA5MDAwNTQzN30.tErsqeL80N37VHo0oIBwuXHwqLAkwAMRphJj5PAC3HU"]
+supabase: Client = create_client(supabase_url, supabase_key)
 
 # Nome ufficiale dell'App!
 NOME_APP = "IoImparo 🎓"
