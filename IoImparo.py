@@ -15,6 +15,7 @@ import json
 # --- 1. CONFIGURAZIONE PAGINA ---
 NOME_APP = "IoImparo 🎓"
 st.set_page_config(page_title=NOME_APP, page_icon="🎓", layout="wide")
+
 # --- NASCONDIAMO IL BRAND STREAMLIT ---
 hide_st_style = """
             <style>
@@ -127,11 +128,13 @@ def genera_pdf_scaricabile(testo):
 st.title(f"🎓 Centrale Operativa {NOME_APP}")
 st.divider()
 
-tab1, tab2, tab3, tab4 = st.tabs([
+# NUOVO TABS CHE INCLUDE LA FASE 5
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "🗺️ Fase 1: Elabora & PDF", 
     "⚡ Fase 2: Flashcard", 
     "🧑‍🏫 Fase 3: Esame",
-    "🥊 Fase 4: Arena Farmacia"
+    "🥊 Fase 4: Arena Farmacia",
+    "🏆 Fase 5: Profilo Ranked"
 ])
 
 with tab1:
@@ -199,6 +202,7 @@ with tab2:
             except Exception as e: st.error(f"Errore generazione: {e}")
     else: st.warning("Carica prima qualcosa in Fase 1!")
 
+# --- FASE 3 AGGIORNATA (LAVAGNA VISIVA) ---
 with tab3:
     if st.session_state.testo_pulito_studente:
         st.markdown("Scrivi **'Iniziamo'** per far partire l'interrogazione.")
@@ -210,14 +214,15 @@ with tab3:
             st.chat_message("user").markdown(inp)
             st.session_state.messaggi_chat.append({"ruolo": "user", "contenuto": inp})
             
-            prompt_prof = f"""Sei un professore universitario rigoroso. 
+            prompt_prof = f"""Sei un professore universitario di materie scientifiche (Farmacia/Medicina) rigoroso ma moderno. 
 Devi interrogare lo studente basandoti ESCLUSIVAMENTE su questi appunti: 
 {st.session_state.testo_pulito_studente[:3000]}
 
 REGOLE TASSATIVE:
-1. Fai UNA SOLA domanda alla volta. Sii estremamente sintetico e attinente al testo.
-2. ASSOLUTAMENTE NON chiedere collegamenti con argomenti esterni e NON fare salti logici strani.
-3. Se lo studente sta rispondendo a una tua domanda, PRIMA valuta la sua risposta dandogli un voto da 1 a 30 (trentesimi), correggi in una riga l'eventuale errore, e POI fai la domanda successiva.
+1. Fai UNA SOLA domanda alla volta. Sii estremamente sintetico.
+2. Se lo studente dà una risposta sbagliata o incompleta, PRIMA valuta da 1 a 30, POI correggilo usando la "Lavagna Visiva".
+3. LAVAGNA VISIVA: Quando correggi concetti complessi (es. molecole, vie anatomiche, tabelle di classificazione farmaci), USA OBBLIGATORIAMENTE il linguaggio Markdown per creare Tabelle riassuntive, oppure usa schemi visivi (ASCII art o elenchi puntati nidificati) per fargli stampare il concetto in testa visivamente.
+4. Dopo la spiegazione visiva, fai subito la domanda successiva.
 
 Storico Chat: {st.session_state.messaggi_chat}"""
             
@@ -373,3 +378,48 @@ Dai SOLO un voto da 1 a 30 (scrivi solo il numero, niente altro testo)."""
                     if st.button("Esci dall'Arena"):
                         del st.session_state.id_sfida_attiva
                         st.rerun()
+
+# --- NUOVA FASE 5 (TRACKER RANKED) ---
+with tab5:
+    st.subheader("🏆 Il Tuo Profilo Ranked")
+    st.write("Spremi appunti e vinci sfide nell'Arena per salire di livello!")
+    
+    with st.spinner("Calcolo delle statistiche in corso..."):
+        try:
+            res_appunti = supabase.table("appunti_salvati").select("*").eq("user_id", st.session_state.utente_loggato.id).execute()
+            appunti_creati = len(res_appunti.data)
+            
+            res_host = supabase.table("sfide_multiplayer").select("punteggio_host").eq("host_id", st.session_state.utente_loggato.id).execute()
+            res_guest = supabase.table("sfide_multiplayer").select("punteggio_guest").eq("guest_id", st.session_state.utente_loggato.id).execute()
+            
+            punti_da_host = sum([x.get('punteggio_host', 0) for x in res_host.data])
+            punti_da_guest = sum([x.get('punteggio_guest', 0) for x in res_guest.data])
+            sfide_giocate = len(res_host.data) + len(res_guest.data)
+            
+            punti_totali = punti_da_host + punti_da_guest
+            
+            if punti_totali < 100: rank, icona, prox = "Novizio Speziale", "🌱", 100
+            elif punti_totali < 500: rank, icona, prox = "Apprendista Alchimista", "🧪", 500
+            elif punti_totali < 1500: rank, icona, prox = "Dottore in Farmacia", "👨‍⚕️", 1500
+            elif punti_totali < 3000: rank, icona, prox = "Ricercatore Senior", "🔬", 3000
+            else: rank, icona, prox = "Scienziato Supremo", "🧬", punti_totali
+            
+            st.markdown(f"### Grado Attuale: {icona} **{rank}**")
+            
+            if rank != "Scienziato Supremo":
+                progresso = punti_totali / prox
+                st.progress(min(progresso, 1.0))
+                st.caption(f"Ti mancano {prox - punti_totali} punti per il prossimo livello!")
+            else:
+                st.progress(1.0)
+                st.caption("Hai raggiunto il livello massimo! Sei una leggenda.")
+            
+            st.divider()
+            
+            c1, c2, c3 = st.columns(3)
+            c1.metric(label="Punti Arena Totali", value=punti_totali, delta="Competitivo")
+            c2.metric(label="Riassunti Generati", value=appunti_creati, delta="Secchione")
+            c3.metric(label="Sfide Giocate", value=sfide_giocate)
+
+        except Exception as e:
+            st.error(f"Errore nel caricamento del profilo: {e}")
