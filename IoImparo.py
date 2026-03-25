@@ -29,10 +29,12 @@ if not st.session_state['utente_loggato']:
         password = st.text_input("Password", type="password", key="login_password")
         
         if st.button("Entra 🚀", use_container_width=True):
-            # QUI INSERIRAI LA TUA LOGICA DI CONTROLLO (es. Supabase)
-            # Per ora simuliamo che il login vada a buon fine:
+            # ... la tua logica di supabase ...
+            
+            # Quando il login ha successo, salviamo DUE cose:
             st.session_state['utente_loggato'] = True
-            st.rerun() # Ricarica la pagina per far sparire il login
+            st.session_state['email_utente'] = email # <-- Salviamo l'email separatamente!
+            st.rerun()
             
     with tab_registrati:
         st.subheader("Crea un nuovo account")
@@ -109,12 +111,14 @@ with st.sidebar:
                     st.rerun()
                 except Exception as e:
                     st.error("Credenziali errate.")
-    else:
-        st.write(f"Socio: **{st.session_state.utente_loggato.email}**")
-        if st.button("Esci 🚪", use_container_width=True):
-            supabase.auth.sign_out()
-            st.session_state.utente_loggato = None
-            st.rerun()
+    # --- 3. L'APP VERA E PROPRIA ---
+else: # <-- Solo se è loggato!
+    
+    # Ora possiamo stampare tranquillamente l'email usando la nuova variabile
+    st.write(f"Socio: **{st.session_state['email_utente']}**")
+    
+    st.title("🎓 Area Studio di IoImparo")
+    # ... resto del sito ...
 
 # --- 5. IL MURO DI PROTEZIONE ---
 if st.session_state.utente_loggato is None:
