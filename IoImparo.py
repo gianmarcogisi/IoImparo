@@ -91,7 +91,7 @@ if st.session_state.utente_loggato is None:
             except Exception as e: st.error(f"Errore: {e}")
     st.stop() 
 
-    # --- 5 & 7. INTERFACCIA PRINCIPALE & MENU A TENDINA ---
+# --- 5 & 7. INTERFACCIA PRINCIPALE & MENU A TENDINA ---
 col_titolo, col_profilo = st.columns([4, 1])
 
 with col_titolo:
@@ -131,7 +131,6 @@ def genera_pdf_scaricabile(testo):
     c.save()
     buf.seek(0)
     return buf
-
 
 
 # NUOVO TABS CHE INCLUDE LA FASE 5
@@ -268,7 +267,7 @@ with tab2:
             except Exception as e: st.error(f"Errore generazione: {e}")
     else: st.warning("Carica prima qualcosa in Fase 1!")
 
-# --- FASE 3 AGGIORNATA (LAVAGNA VISIVA) ---
+# --- FASE 3 AGGIORNATA (LAVAGNA VISIVA + PROFESSORE CATTIVO) ---
 with tab3:
     if st.session_state.testo_pulito_studente:
         st.markdown("Scrivi **'Iniziamo'** per far partire l'interrogazione.")
@@ -280,15 +279,17 @@ with tab3:
             st.chat_message("user").markdown(inp)
             st.session_state.messaggi_chat.append({"ruolo": "user", "contenuto": inp})
             
-            prompt_prof = f"""Sei un professore universitario di materie scientifiche (Farmacia/Medicina) rigoroso ma moderno. 
+            prompt_prof = f"""Sei un professore universitario di materie scientifiche (Farmacia/Medicina) geniale, incredibilmente sarcastico e dalla battuta pronta. Sei un po' come il Dr. House: pungente e ironico, ma sotto sotto ci tieni che i tuoi studenti imparino.
 Devi interrogare lo studente basandoti ESCLUSIVAMENTE su questi appunti: 
 {st.session_state.testo_pulito_studente[:3000]}
 
 REGOLE TASSATIVE:
-1. Fai UNA SOLA domanda alla volta. Sii estremamente sintetico.
-2. Se lo studente dà una risposta sbagliata o incompleta, PRIMA valuta da 1 a 30, POI correggilo usando la "Lavagna Visiva".
-3. LAVAGNA VISIVA: Quando correggi concetti complessi (es. molecole, vie anatomiche, tabelle di classificazione farmaci), USA OBBLIGATORIAMENTE il linguaggio Markdown per creare Tabelle riassuntive, oppure usa schemi visivi (ASCII art o elenchi puntati nidificati) per fargli stampare il concetto in testa visivamente.
-4. Dopo la spiegazione visiva, fai subito la domanda successiva.
+1. Fai UNA SOLA domanda alla volta. Sii sintetico ma aggiungi sempre una piccola nota sarcastica o una battuta tagliente.
+2. Se lo studente dà una risposta senza senso (es. 'asd', '123') o spara una cavalleria galattica, distruggilo con sarcasmo spietato, dagli un voto bassissimo (es. 1/30) e prendilo bonariamente in giro per la sua ignoranza.
+3. Se la risposta è sbagliata o incompleta, PRIMA valuta da 1 a 30 con un commento ironico, POI correggilo usando la "Lavagna Visiva".
+4. Se la risposta è corretta, fagli un complimento, ma sempre mantenendo il tuo ego smisurato (es. "Bravo, quasi ai miei livelli...").
+5. LAVAGNA VISIVA: Quando correggi, USA OBBLIGATORIAMENTE il linguaggio Markdown per creare Tabelle riassuntive o schemi visivi (ASCII art o elenchi).
+6. Dopo la spiegazione, fai subito la domanda successiva.
 
 Storico Chat: {st.session_state.messaggi_chat}"""
             
@@ -417,7 +418,7 @@ Testo: {str(testo_arena)[:3000]}"""
                             st.session_state.indice_domanda += 1
                             st.rerun()
 
-                    # Domande Aperte
+                    # Domande Aperte (Voto blindato)
                     else:
                         risposta = st.text_area("Scrivi la tua risposta:", key=f"text_{indice}")
                         if st.button("Consegna al Prof 📝", key=f"btn_a_{indice}"):
@@ -425,12 +426,16 @@ Testo: {str(testo_arena)[:3000]}"""
                                 prompt_voto = f"""Valuta questa risposta dello studente: '{risposta}'.
 Domanda: '{d['domanda']}'.
 Basati su questo testo: {sfida['appunti_testo'][:2000]}.
-Dai SOLO un voto da 1 a 30 (scrivi solo il numero, niente altro testo)."""
+REGOLE TASSATIVE PER IL VOTO:
+1. Dai SOLO un voto da 1 a 30 (scrivi solo il numero, niente altro testo).
+2. Se la risposta è composta da lettere a caso (es. 'fasd'), numeri a caso, è completamente fuori tema o palesemente errata, DEVI dare un voto da 1 a 3. NON regalare punti!"""
                                 try:
                                     voto_str = genera_testo_con_fallback(prompt_voto).strip()
-                                    voto = int(''.join(filter(str.isdigit, voto_str))) 
+                                    numeri_estratti = ''.join(filter(str.isdigit, voto_str))
+                                    # Se trova dei numeri li usa, altrimenti bocciatura automatica a 1
+                                    voto = int(numeri_estratti) if numeri_estratti else 1 
                                     if voto > 30: voto = 30
-                                except: voto = 15
+                                except: voto = 1
                                     
                                 st.success(f"🎓 Voto del professore: {voto}/30!")
                                 nuovo_totale = sfida[colonna_punteggio] + voto
