@@ -194,7 +194,7 @@ with tab2:
 
 with tab3:
     if st.session_state.testo_pulito_studente:
-        st.markdown("Scrivi **'Iniziamo'** per l'interrogazione.")
+        st.markdown("Scrivi **'Iniziamo'** per far partire l'interrogazione.")
         for m in st.session_state.messaggi_chat:
             with st.chat_message(m["ruolo"]): st.markdown(m["contenuto"])
         
@@ -202,8 +202,21 @@ with tab3:
         if inp:
             st.chat_message("user").markdown(inp)
             st.session_state.messaggi_chat.append({"ruolo": "user", "contenuto": inp})
-            prompt = f"Sei un prof. Appunti: {st.session_state.testo_pulito_studente[:3000]}. Chat: {st.session_state.messaggi_chat}. Fai una domanda o valuta con voto."
-            res = client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
+            
+            # --- IL NUOVO CERVELLO DEL PROFESSORE BLINDATO ---
+            prompt_prof = f"""Sei un professore universitario rigoroso. 
+Devi interrogare lo studente basandoti ESCLUSIVAMENTE su questi appunti: 
+{st.session_state.testo_pulito_studente[:3000]}
+
+REGOLE TASSATIVE:
+1. Fai UNA SOLA domanda alla volta. Sii estremamente sintetico e attinente al testo.
+2. ASSOLUTAMENTE NON chiedere collegamenti con argomenti esterni e NON fare salti logici strani.
+3. Se lo studente sta rispondendo a una tua domanda, PRIMA valuta la sua risposta dandogli un voto da 1 a 30 (trentesimi), correggi in una riga l'eventuale errore, e POI fai la domanda successiva.
+
+Storico Chat: {st.session_state.messaggi_chat}"""
+            # --------------------------------------------------
+
+            res = client.models.generate_content(model='gemini-2.5-flash', contents=prompt_prof)
             with st.chat_message("assistant"): st.markdown(res.text)
             st.session_state.messaggi_chat.append({"ruolo": "assistant", "contenuto": res.text})
     else:
