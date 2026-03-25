@@ -414,10 +414,23 @@ Testo: {str(testo_arena)[:3000]}"""
                     if d.get("tipo") == "multipla":
                         scelta = st.radio("Scegli la risposta corretta:", d.get('opzioni', []), key=f"radio_{indice}")
                         if st.button("Conferma Risposta ✅", key=f"btn_m_{indice}"):
-                            punti_vinti = 30 if scelta == d.get('corretta') else 0
-                            if punti_vinti == 30: st.success("🎯 Esatto! +30 punti")
-                            else: st.error(f"❌ Sbagliato! La corretta era: {d.get('corretta')}")
                             
+                            # --- LA MAGIA DI VISION PER IL BUG DELLE RISPOSTE ---
+                            scelta_str = str(scelta).strip().lower()
+                            corretta_str = str(d.get('corretta', '')).strip().lower()
+                            
+                            # Controllo "a prova di bomba": 
+                            # Verifica se sono identiche, o se una è contenuta nell'altra (es. "c" dentro "c) acido")
+                            is_esatta = (scelta_str == corretta_str) or (corretta_str in scelta_str) or (scelta_str in corretta_str)
+                            
+                            punti_vinti = 30 if is_esatta else 0
+                            # ----------------------------------------------------
+                            
+                            if punti_vinti == 30: 
+                                st.success("🎯 Esatto! +30 punti")
+                            else: 
+                                st.error(f"❌ Sbagliato! La corretta era: {d.get('corretta')}")
+                                
                             nuovo_totale = sfida[colonna_punteggio] + punti_vinti
                             supabase.table("sfide_multiplayer").update({colonna_punteggio: nuovo_totale}).eq("id", sfida['id']).execute()
                             time.sleep(2)
