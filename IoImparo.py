@@ -61,23 +61,28 @@ def genera_testo_gemini(prompt):
             else:
                 raise e
 
-# Motore 2: Groq con Fallback (Per la chat veloce col Prof)
-def chat_professore_con_fallback(prompt):
+# Motore 2: Chat del Professore (Tutto su Gemini!)
+def chat_professore_gemini(system_prompt, messaggi_chat):
     try:
-        # 1. Prova con Groq (Veloce e sarcastico)
-        chat_completion = groq_client.chat.completions.create(
-            messages=[{"role": "user", "content": prompt}],
-            model="llama-3.3-70b-versatile",
+        # Costruiamo il copione esatto per Gemini
+        prompt_completo = system_prompt + "\n\n--- CRONOLOGIA CHAT ---\n"
+        
+        # Aggiungiamo lo storico in modo che Gemini capisca chi parla
+        for msg in messaggi_chat:
+            ruolo = "Professore" if msg["ruolo"] == "assistant" else "Studente"
+            prompt_completo += f"{ruolo}: {msg['contenuto']}\n"
+            
+        # Diamo la parola al prof
+        prompt_completo += "Professore: "
+
+        # Usiamo il velocissimo Flash 2.5
+        response = client.models.generate_content(
+            model='gemini-2.5-flash', 
+            contents=prompt_completo
         )
-        return chat_completion.choices[0].message.content
+        return response.text
     except Exception as e:
-        # 2. Se Groq fallisce (limite messaggi), entra la ruota di scorta Gemini!
-        st.toast("Il Prof ha finito la voce su Groq. Interviene il supplente Gemini! 🚀", icon="🔄")
-        try:
-            response = client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
-            return response.text
-        except Exception as e_gemini:
-            raise e_gemini
+        raise e
 
 # --- 3. GESTIONE SESSIONE UTENTE ---
 if "utente_loggato" not in st.session_state: st.session_state.utente_loggato = None
@@ -302,12 +307,11 @@ REGOLE TASSATIVE:
 Storico Chat: {st.session_state.messaggi_chat}"""
             
             try:
-                # --- ECCO LO SPINNER DEL PROFESSORE ---
+                # --- LO SPINNER DEL PROFESSORE ---
                 with st.spinner("🧑‍🏫 Il Prof sta affilando il sarcasmo e valutando la tua risposta... Trema!"):
-                    # ORA USA GROQ PER VELOCITÀ, MA HA IL SALVAGENTE GEMINI
-                    risposta_prof = chat_professore_con_fallback(prompt_prof)
+                    # ORA USA SOLO GEMINI! Gli passiamo il copione e lo storico della chat
+                    risposta_prof = chat_professore_gemini(system_prompt, st.session_state.messaggi_chat)
                 
-                # Questa parte va fuori dallo spinner, così il testo appare alla fine dell'attesa
                 with st.chat_message("assistant"): 
                     st.markdown(risposta_prof)
                 st.session_state.messaggi_chat.append({"ruolo": "assistant", "contenuto": risposta_prof})
@@ -317,6 +321,22 @@ Storico Chat: {st.session_state.messaggi_chat}"""
 
 with tab4:
     st.subheader("🧪 Arena di Farmacia")
+
+    # --- 1. SISTEMA DI RICONNESSIONE AUTOMATICA ---
+    if "id_sfida_attiva" not in st.session_state:
+        # Controlliamo se l'utente ha già una sfida in corso nel DB (da Host o da Guest)
+        uid = st.session_state.utente_loggato.id
+        res_host = supabase.table("sfide_multiplayer").select("id").eq("host_id", uid).in_("stato", ["waiting", "playing"]).execute()
+        res_guest = supabase.table("sfide_multiplayer").select("id").eq("guest_id", uid).eq("stato", "playing").execute()
+        
+        if res_host.data:
+            st.session_state.id_sfida_attiva = res_host.data[0]['id']
+            st.toast("Bentornato nell'Arena! Ti abbiamo ricollegato in automatico.", icon="🔌")
+        elif res_guest.data:
+            st.session_state.id_sfida_attiva = res_guest.data[0]['id']
+            st.toast("Bentornato nell'Arena! Ti abbiamo ricollegato in automatico.", icon="🔌")
+
+    # --- FINE RICONNESSIONE ---
 
     if "id_sfida_attiva" not in st.session_state:
         scelta_arena = st.radio("Cosa vuoi fare?", ["Crea Sfida 🏗️", "Unisciti a Sfida ⚔️"], horizontal=True)
@@ -393,10 +413,17 @@ Testo: {str(testo_arena)[:3000]}"""
             
             if sfida['stato'] == 'waiting':
                 st.warning(f"⏳ PIN: {sfida['pin']} | In attesa dello sfidante...")
-                if st.button("Aggiorna Stato 🔄"): st.rerun()
-                if st.button("Annulla Sfida"): 
+                
+                # Permettiamo di annullare la sfida se l'amico non arriva
+                if st.button("Annulla Sfida", type="secondary"): 
+                    supabase.table("sfide_multiplayer").update({"stato": "finished"}).eq("id", sfida['id']).execute()
                     del st.session_state.id_sfida_attiva
                     st.rerun()
+                else:
+                    # --- AUTO-REFRESH MAGICO ---
+                    with st.spinner("Cerco lo sfidante... (La pagina si aggiorna da sola)"):
+                        time.sleep(3) # Aspetta 3 secondi
+                        st.rerun()    # Ricarica l'interfaccia
             
             elif sfida['stato'] == 'playing':
                 st.divider()
