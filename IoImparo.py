@@ -226,12 +226,59 @@ with tab3:
             
             
 with tab4:
-    st.subheader("🧪 Benvenuto nell'Arena di Farmacia")
-    st.write("Sfida un collega in tempo reale su un argomento specifico!")
+    st.subheader("🧪 Arena di Farmacia")
 
-    scelta_arena = st.radio("Cosa vuoi fare?", ["Crea Sfida 🏗️", "Unisciti a Sfida ⚔️"], horizontal=True)
+    # --- 1. SE NON SEI IN UNA SFIDA, MOSTRA IL MENU ---
+    if "id_sfida_attiva" not in st.session_state:
+        scelta_arena = st.radio("Cosa vuoi fare?", ["Crea Sfida 🏗️", "Unisciti a Sfida ⚔️"], horizontal=True)
 
-    if scelta_arena == "Crea Sfida 🏗️":
+        if scelta_arena == "Crea Sfida 🏗️":
+            materia = st.selectbox("Seleziona l'esame:", [
+                "Chimica Farmaceutica", "Farmacologia", "Biochimica", "Anatomia" # ...aggiungi tutte le altre qui...
+            ])
+            file_sfida = st.file_uploader("Carica materiale", type=['pdf', 'jpg', 'png'], key="file_arena")
+            
+            if st.button("Genera Arena 🏟️") and file_sfida:
+                with st.spinner("Preparando il ring..."):
+                    # ... (Qui va tutto il codice di generazione che abbiamo scritto prima) ...
+                    # ALLA FINE DELLA GENERAZIONE AGGIUNGI:
+                    st.session_state.id_sfida_attiva = res_insert.data[0]['id'] # Salviamo l'ID
+                    st.rerun()
+
+        else: # --- UNISCITI A SFIDA ---
+            pin_inserito = st.text_input("Inserisci il PIN di 4 cifre:")
+            if st.button("Entra nel Ring 🥊"):
+                res_sfida = supabase.table("sfide_multiplayer").select("*").eq("pin", pin_inserito).eq("stato", "waiting").execute()
+                if res_sfida.data:
+                    id_sfida = res_sfida.data[0]['id']
+                    supabase.table("sfide_multiplayer").update({"guest_id": st.session_state.utente_loggato.id, "stato": "playing"}).eq("id", id_sfida).execute()
+                    
+                    # RIGA FONDAMENTALE: Diciamo all'app che questa è la nostra sfida!
+                    st.session_state.id_sfida_attiva = id_sfida
+                    st.success("✅ Sei dentro! Preparati...")
+                    st.rerun()
+                else:
+                    st.error("PIN non trovato.")
+
+    # --- 2. LOGICA DI COMBATTIMENTO (Fuori dal menu, visibile solo se id_sfida_attiva esiste) ---
+    else:
+        # Recuperiamo i dati della sfida salvata in session_state
+        res_live = supabase.table("sfide_multiplayer").select("*").eq("id", st.session_state.id_sfida_attiva).execute()
+        
+        if res_live.data:
+            sfida = res_live.data[0]
+            
+            if sfida['stato'] == 'waiting':
+                st.warning(f"⏳ PIN: {sfida['pin']} | In attesa dello sfidante...")
+                if st.button("Aggiorna Stato 🔄"): st.rerun()
+                if st.button("Annulla Sfida"): 
+                    del st.session_state.id_sfida_attiva
+                    st.rerun()
+            
+            elif sfida['stato'] == 'playing':
+                st.info(f"🥊 COMBATTIMENTO IN CORSO: {sfida['materia']}")
+                # Qui parte il quiz che abbiamo scritto nell'ultimo messaggio!
+                # (Domanda 1, Domanda 2, ecc.)
 materia = st.selectbox("Seleziona l'esame della sfida:", [
             # Primo Anno
             "Chimica Generale ed Inorganica", "Biologia Animale", "Biologia Vegetale", 
