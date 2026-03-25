@@ -55,7 +55,7 @@ def genera_testo_con_fallback(prompt):
             st.toast("Google intasato. Attivo Llama 3... 🚀", icon="🦙")
             chat_completion = groq_client.chat.completions.create(
                 messages=[{"role": "user", "content": prompt}],
-                llama-3.3-70b-versatile",
+                model = "llama-3.3-70b-versatile",
             )
             return chat_completion.choices[0].message.content
         else:
