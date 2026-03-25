@@ -265,12 +265,16 @@ with tab1:
 with tab2:
     if st.session_state.testo_pulito_studente:
         if st.button("Genera Flashcard 🚀"):
-            try:
-                # ORA USA GEMINI, MOLTO PIÙ ADATTO AI TESTI LUNGHI
-                testo_flashcard = genera_testo_gemini(f"Crea 5 flashcard domanda/risposta da qui: {st.session_state.testo_pulito_studente}")
-                st.info(testo_flashcard)
-            except Exception as e: st.error(f"Errore generazione: {e}")
-    else: st.warning("Carica prima qualcosa in Fase 1!")
+            # --- ECCO LO SPINNER SIMPATICO ---
+            with st.spinner("🧠 Sto frullando gli appunti per creare le tue Flashcard magiche... Scalda il cervello!"):
+                try:
+                    # ORA USA GEMINI, MOLTO PIÙ ADATTO AI TESTI LUNGHI
+                    testo_flashcard = genera_testo_gemini(f"Crea 5 flashcard domanda/risposta da qui: {st.session_state.testo_pulito_studente}")
+                    st.info(testo_flashcard)
+                except Exception as e: 
+                    st.error(f"Errore generazione: {e}")
+    else: 
+        st.warning("Carica prima qualcosa in Fase 1!")
 
 with tab3:
     if st.session_state.testo_pulito_studente:
@@ -298,12 +302,18 @@ REGOLE TASSATIVE:
 Storico Chat: {st.session_state.messaggi_chat}"""
             
             try:
-                # ORA USA GROQ PER VELOCITÀ, MA HA IL SALVAGENTE GEMINI
-                risposta_prof = chat_professore_con_fallback(prompt_prof)
-                with st.chat_message("assistant"): st.markdown(risposta_prof)
+                # --- ECCO LO SPINNER DEL PROFESSORE ---
+                with st.spinner("🧑‍🏫 Il Prof sta affilando il sarcasmo e valutando la tua risposta... Trema!"):
+                    # ORA USA GROQ PER VELOCITÀ, MA HA IL SALVAGENTE GEMINI
+                    risposta_prof = chat_professore_con_fallback(prompt_prof)
+                
+                # Questa parte va fuori dallo spinner, così il testo appare alla fine dell'attesa
+                with st.chat_message("assistant"): 
+                    st.markdown(risposta_prof)
                 st.session_state.messaggi_chat.append({"ruolo": "assistant", "contenuto": risposta_prof})
-            except Exception as e: st.error(f"Errore Chat: {e}")
-    else: st.warning("Carica prima qualcosa in Fase 1!")
+                
+            except Exception as e: 
+                st.error(f"Errore Chat: {e}")
 
 with tab4:
     st.subheader("🧪 Arena di Farmacia")
