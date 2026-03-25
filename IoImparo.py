@@ -73,7 +73,7 @@ if st.session_state.utente_loggato is None:
     with tab_login:
         email = st.text_input("Email", key="login_email")
         password = st.text_input("Password", type="password", key="login_password")
-        if st.button("Entra 🔑", use_container_width=True):
+        if st.button("Entra 🔑", type="primary", use_container_width=True):
             try:
                 res = supabase.auth.sign_in_with_password({"email": email, "password": password})
                 st.session_state.utente_loggato = res.user
@@ -143,7 +143,7 @@ with tab1:
         st.subheader("📥 Carica Materiale")
         tipo_file = st.radio("Formato:", ["📄 PDF", "📸 Foto"], horizontal=True)
         file_input = st.file_uploader("Scegli file", type=['pdf'] if tipo_file == "📄 PDF" else ['png', 'jpg', 'jpeg'], key="file_up")
-        bottone_elabora = st.button("Spremi Appunti 🪄", use_container_width=True)
+        bottone_elabora = st.button("Spremi Appunti 🪄", type="primary", use_container_width=True)
 
     with col2:
         st.subheader("📄 Risultato")
@@ -251,7 +251,7 @@ with tab4:
             ])
             file_sfida = st.file_uploader("Carica materiale", type=['pdf', 'jpg', 'png'], key="file_arena")
             
-            if st.button("Genera Arena 🏟️") and file_sfida:
+            if st.button("Genera Arena 🏟️", type="primary") and file_sfida:
                 with st.spinner("Preparando il ring (10 domande)..."):
                     try:
                         contenuti = ["Estrai tutto il testo per una sfida tra studenti:"]
@@ -290,7 +290,7 @@ Testo: {str(testo_arena)[:3000]}"""
 
         else: # Unisciti a Sfida
             pin_inserito = st.text_input("Inserisci il PIN di 4 cifre:")
-            if st.button("Entra nel Ring 🥊"):
+            if st.button("Entra nel Ring 🥊", type="primary"):
                 res_sfida = supabase.table("sfide_multiplayer").select("*").eq("pin", pin_inserito).eq("stato", "waiting").execute()
                 if res_sfida.data:
                     id_sfida = res_sfida.data[0]['id']
