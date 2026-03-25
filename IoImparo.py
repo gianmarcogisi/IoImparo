@@ -8,9 +8,9 @@ from reportlab.lib.pagesizes import letter
 import io
 from supabase import create_client, Client
 import time
-from groq import Groq # <-- NUOVA LIBRERIA
+from groq import Groq
 import random
-import json # Ci serve per gestire le domande del quiz
+import json
 
 # --- 1. CONFIGURAZIONE PAGINA ---
 NOME_APP = "IoImparo 🎓"
@@ -20,84 +20,68 @@ st.set_page_config(page_title=NOME_APP, page_icon="🎓", layout="wide")
 api_key = st.secrets["GEMINI_API_KEY"]
 supabase_url = st.secrets["SUPABASE_URL"]
 supabase_key = st.secrets["SUPABASE_KEY"]
-groq_api_key = st.secrets["GROQ_API_KEY"] # <-- CHIAVE GROQ
+groq_api_key = st.secrets["GROQ_API_KEY"]
 
-# Inizializziamo i client
 supabase: Client = create_client(supabase_url, supabase_key)
 client = genai.Client(api_key=api_key)
-groq_client = Groq(api_key=groq_api_key) # <-- CLIENT GROQ
+groq_client = Groq(api_key=groq_api_key)
 
-# Mostra il pass VIP al DB
 if "access_token" in st.session_state:
     try:
         supabase.auth.set_session(st.session_state.access_token, st.session_state.refresh_token)
     except Exception:
         pass 
 
-# --- IL CENTRALINO MULTI-MODELLO (La Magia) ---
+# --- IL CENTRALINO MULTI-MODELLO ---
 def genera_testo_con_fallback(prompt):
-    """Prova con Gemini, se fallisce passa a Groq (Llama 3) in automatico"""
     try:
-        # Tentativo 1: Gemini (Veloce e gratis)
         response = client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
         return response.text
     except Exception as e:
-        # Se i server Google sono esplosi (503) o hai finito la quota (429)
         if "503" in str(e) or "429" in str(e):
-            st.toast("Google è intasato. Attivo i server di scorta (Llama 3)... 🚀", icon="🦙")
-            # Tentativo 2: Groq (Llama 3 8B - Velocissimo)
+            st.toast("Google intasato. Attivo Llama 3... 🚀", icon="🦙")
             chat_completion = groq_client.chat.completions.create(
                 messages=[{"role": "user", "content": prompt}],
                 model="llama3-8b-8192",
             )
             return chat_completion.choices[0].message.content
         else:
-            # Se è un altro tipo di errore, lo mostra
             raise e
-# ---------------------------------------------
 
 # --- 3. GESTIONE SESSIONE UTENTE ---
-if "utente_loggato" not in st.session_state:
-    st.session_state.utente_loggato = None
-if "testo_pulito_studente" not in st.session_state:
-    st.session_state.testo_pulito_studente = ""
-if "riassunto_pdf" not in st.session_state:
-    st.session_state.riassunto_pdf = None
-if "messaggi_chat" not in st.session_state:
-    st.session_state.messaggi_chat = []
+if "utente_loggato" not in st.session_state: st.session_state.utente_loggato = None
+if "testo_pulito_studente" not in st.session_state: st.session_state.testo_pulito_studente = ""
+if "riassunto_pdf" not in st.session_state: st.session_state.riassunto_pdf = None
+if "messaggi_chat" not in st.session_state: st.session_state.messaggi_chat = []
 
-# --- 4. IL MURO DI PROTEZIONE & LOGIN ---
+# --- 4. LOGIN ---
 if st.session_state.utente_loggato is None:
     st.title(f"🎓 {NOME_APP}")
-    st.warning("👋 Benvenuto! Per iniziare a studiare, accedi o registrati qui sotto.")
+    st.warning("👋 Benvenuto! Accedi o registrati per iniziare.")
     
     tab_login, tab_registrati = st.tabs(["🔑 Accedi", "📝 Registrati"])
-    
     with tab_login:
         email = st.text_input("Email", key="login_email")
         password = st.text_input("Password", type="password", key="login_password")
-        if st.button("Entra nell'Arena 🔑", use_container_width=True):
+        if st.button("Entra 🔑", use_container_width=True):
             try:
                 res = supabase.auth.sign_in_with_password({"email": email, "password": password})
                 st.session_state.utente_loggato = res.user
                 st.session_state.access_token = res.session.access_token
                 st.session_state.refresh_token = res.session.refresh_token
                 st.rerun()
-            except Exception as e:
-                st.error("Credenziali errate.")
-                
+            except Exception: st.error("Credenziali errate.")
     with tab_registrati:
         nuova_email = st.text_input("Nuova Email", key="reg_email")
         nuova_password = st.text_input("Nuova Password", type="password", key="reg_password")
         if st.button("Crea Account 🚀", use_container_width=True):
             try:
                 supabase.auth.sign_up({"email": nuova_email, "password": nuova_password})
-                st.success("Account creato! Ora puoi fare il login.")
-            except Exception as e:
-                st.error(f"Errore: {e}")
+                st.success("Account creato! Ora fai il login.")
+            except Exception as e: st.error(f"Errore: {e}")
     st.stop() 
 
-# --- 5. SIDEBAR: PROFILO ---
+# --- 5. SIDEBAR ---
 with st.sidebar:
     st.image("https://img.icons8.com/fluent/100/000000/graduation-cap.png", width=100)
     st.title("Area Riservata")
@@ -106,7 +90,7 @@ with st.sidebar:
         st.session_state.utente_loggato = None
         st.rerun()
 
-# --- 6. FUNZIONE PDF ---
+# --- 6. PDF ---
 def genera_pdf_scaricabile(testo):
     buf = io.BytesIO()
     c = canvas.Canvas(buf, pagesize=letter)
@@ -134,7 +118,6 @@ def genera_pdf_scaricabile(testo):
 st.title(f"🎓 Centrale Operativa {NOME_APP}")
 st.divider()
 
-# --- AGGIORNA LA RIGA DEI TABS ---
 tab1, tab2, tab3, tab4 = st.tabs([
     "🗺️ Fase 1: Elabora & PDF", 
     "⚡ Fase 2: Flashcard", 
@@ -165,16 +148,12 @@ with tab1:
             with st.spinner("Lavorando con Gemini Vision..."):
                 try:
                     contenuti = ["""Agisci come il miglior assistente universitario del mondo. Analizza il materiale fornito e scrivi un documento diviso ESATTAMENTE in queste 3 sezioni ben visibili:
-
 --- SEZIONE 1: TRASCRIZIONE ---
 (Se ti ho fornito un'immagine, trascrivi fedelmente tutto il testo che vedi. Se è un PDF testuale, scrivi semplicemente: 'Documento digitale riconosciuto').
-
 --- SEZIONE 2: SCHEMA CONCETTUALE ---
 (Crea uno schema a punti dettagliato, estraendo i concetti chiave e le definizioni più importanti).
-
 --- SEZIONE 3: RIASSUNTO COMPLETO ---
-(Scrivi un riassunto discorsivo, chiaro e approfondito per studiare).
-"""]
+(Scrivi un riassunto discorsivo, chiaro e approfondito per studiare)."""]
                     
                     if file_input.type == "application/pdf":
                         reader = PyPDF2.PdfReader(file_input)
@@ -206,11 +185,9 @@ with tab2:
     if st.session_state.testo_pulito_studente:
         if st.button("Genera Flashcard 🚀"):
             try:
-                # USIAMO IL CENTRALINO!
                 testo_flashcard = genera_testo_con_fallback(f"Crea 5 flashcard domanda/risposta da qui: {st.session_state.testo_pulito_studente}")
                 st.info(testo_flashcard)
-            except Exception as e:
-                st.error(f"Errore generazione: {e}")
+            except Exception as e: st.error(f"Errore generazione: {e}")
     else: st.warning("Carica prima qualcosa in Fase 1!")
 
 with tab3:
@@ -224,28 +201,80 @@ with tab3:
             st.chat_message("user").markdown(inp)
             st.session_state.messaggi_chat.append({"ruolo": "user", "contenuto": inp})
             
+            prompt_prof = f"""Sei un professore universitario rigoroso. 
+Devi interrogare lo studente basandoti ESCLUSIVAMENTE su questi appunti: 
+{st.session_state.testo_pulito_studente[:3000]}
+
+REGOLE TASSATIVE:
+1. Fai UNA SOLA domanda alla volta. Sii estremamente sintetico e attinente al testo.
+2. ASSOLUTAMENTE NON chiedere collegamenti con argomenti esterni e NON fare salti logici strani.
+3. Se lo studente sta rispondendo a una tua domanda, PRIMA valuta la sua risposta dandogli un voto da 1 a 30 (trentesimi), correggi in una riga l'eventuale errore, e POI fai la domanda successiva.
+
+Storico Chat: {st.session_state.messaggi_chat}"""
             
+            try:
+                risposta_prof = genera_testo_con_fallback(prompt_prof)
+                with st.chat_message("assistant"): st.markdown(risposta_prof)
+                st.session_state.messaggi_chat.append({"ruolo": "assistant", "contenuto": risposta_prof})
+            except Exception as e: st.error(f"Errore Chat: {e}")
+    else: st.warning("Carica prima qualcosa in Fase 1!")
+
 with tab4:
     st.subheader("🧪 Arena di Farmacia")
 
-    # --- 1. SE NON SEI IN UNA SFIDA, MOSTRA IL MENU ---
     if "id_sfida_attiva" not in st.session_state:
         scelta_arena = st.radio("Cosa vuoi fare?", ["Crea Sfida 🏗️", "Unisciti a Sfida ⚔️"], horizontal=True)
 
         if scelta_arena == "Crea Sfida 🏗️":
             materia = st.selectbox("Seleziona l'esame:", [
-                "Chimica Farmaceutica", "Farmacologia", "Biochimica", "Anatomia" # ...aggiungi tutte le altre qui...
+                "Chimica Generale ed Inorganica", "Biologia Animale", "Biologia Vegetale", "Fisica", 
+                "Matematica ed Informatica", "Anatomia Umana", "Chimica Organica", "Microbiologia", 
+                "Fisiologia Umana", "Analisi dei Medicinali I", "Biochimica", "Farmacologia e Farmacoterapia", 
+                "Analisi dei Medicinali II", "Patologia Generale", "Chimica Farmaceutica e Tossicologica I",
+                "Chimica Farmaceutica e Tossicologica II", "Tecnologia e Legislazione Farmaceutiche", 
+                "Tossicologia", "Chimica degli Alimenti", "Farmacognosia", "Farmacia Clinica", 
+                "Saggi e Dosaggi dei Farmaci", "Biochimica Applicata", "Fitoterapia", "Igiene"
             ])
             file_sfida = st.file_uploader("Carica materiale", type=['pdf', 'jpg', 'png'], key="file_arena")
             
             if st.button("Genera Arena 🏟️") and file_sfida:
-                with st.spinner("Preparando il ring..."):
-                    # ... (Qui va tutto il codice di generazione che abbiamo scritto prima) ...
-                    # ALLA FINE DELLA GENERAZIONE AGGIUNGI:
-                    st.session_state.id_sfida_attiva = res_insert.data[0]['id'] # Salviamo l'ID
-                    st.rerun()
+                with st.spinner("Preparando il ring (10 domande)..."):
+                    try:
+                        contenuti = ["Estrai tutto il testo per una sfida tra studenti:"]
+                        if file_sfida.type == "application/pdf":
+                            reader = PyPDF2.PdfReader(file_sfida)
+                            testo_arena = "".join([page.extract_text() for page in reader.pages])
+                        else: testo_arena = Image.open(file_sfida)
+                            
+                        prompt_quiz = f"""Genera esattamente 10 domande su questo testo di {materia}: le prime 5 a risposta multipla e le successive 5 a risposta aperta.
+Rispondi SOLO ed ESCLUSIVAMENTE con un array JSON avente questa struttura esatta:
+[
+  {{"tipo": "multipla", "domanda": "...", "opzioni": ["A", "B", "C", "D"], "corretta": "A"}},
+  {{"tipo": "aperta", "domanda": "..."}}
+]
+Devono essere 10 elementi in totale (5 multipla, 5 aperta).
+Testo: {str(testo_arena)[:3000]}"""
+                        
+                        quiz_raw = genera_testo_con_fallback(prompt_quiz)
+                        quiz_pulito = quiz_raw.strip().replace("```json", "").replace("```", "")
+                        
+                        nuovo_pin = str(random.randint(1000, 9999))
+                        res_insert = supabase.table("sfide_multiplayer").insert({
+                            "pin": nuovo_pin,
+                            "materia": materia,
+                            "host_id": st.session_state.utente_loggato.id,
+                            "appunti_testo": str(testo_arena)[:3000],
+                            "domande_json": json.loads(quiz_pulito),
+                            "stato": "waiting"
+                        }).execute()
+                        
+                        st.session_state.id_sfida_attiva = res_insert.data[0]['id']
+                        st.success(f"🔥 Arena Creata! Dai questo PIN: {nuovo_pin}")
+                        time.sleep(2)
+                        st.rerun()
+                    except Exception as e: st.error(f"Errore creazione arena: {e}")
 
-        else: # --- UNISCITI A SFIDA ---
+        else: # Unisciti a Sfida
             pin_inserito = st.text_input("Inserisci il PIN di 4 cifre:")
             if st.button("Entra nel Ring 🥊"):
                 res_sfida = supabase.table("sfide_multiplayer").select("*").eq("pin", pin_inserito).eq("stato", "waiting").execute()
@@ -253,16 +282,14 @@ with tab4:
                     id_sfida = res_sfida.data[0]['id']
                     supabase.table("sfide_multiplayer").update({"guest_id": st.session_state.utente_loggato.id, "stato": "playing"}).eq("id", id_sfida).execute()
                     
-                    # RIGA FONDAMENTALE: Diciamo all'app che questa è la nostra sfida!
                     st.session_state.id_sfida_attiva = id_sfida
                     st.success("✅ Sei dentro! Preparati...")
+                    time.sleep(1)
                     st.rerun()
-                else:
-                    st.error("PIN non trovato.")
+                else: st.error("PIN non trovato o sfida già iniziata.")
 
-    # --- 2. LOGICA DI COMBATTIMENTO (Fuori dal menu, visibile solo se id_sfida_attiva esiste) ---
     else:
-        # Recuperiamo i dati della sfida salvata in session_state
+        # LOGICA DI COMBATTIMENTO
         res_live = supabase.table("sfide_multiplayer").select("*").eq("id", st.session_state.id_sfida_attiva).execute()
         
         if res_live.data:
@@ -276,105 +303,64 @@ with tab4:
                     st.rerun()
             
             elif sfida['stato'] == 'playing':
-                st.info(f"🥊 COMBATTIMENTO IN CORSO: {sfida['materia']}")
-                # Qui parte il quiz che abbiamo scritto nell'ultimo messaggio!
-                # (Domanda 1, Domanda 2, ecc.)
-materia = st.selectbox("Seleziona l'esame della sfida:", [
-            # Primo Anno
-            "Chimica Generale ed Inorganica", "Biologia Animale", "Biologia Vegetale", 
-            "Fisica", "Matematica ed Informatica", "Anatomia Umana",
-            # Secondo Anno
-            "Chimica Organica", "Microbiologia", "Fisiologia Umana", "Analisi dei Medicinali I",
-            # Terzo Anno
-            "Biochimica", "Farmacologia e Farmacoterapia", "Analisi dei Medicinali II", 
-            "Patologia Generale", "Chimica Farmaceutica e Tossicologica I",
-            # Quarto Anno
-            "Chimica Farmaceutica e Tossicologica II", "Tecnologia e Legislazione Farmaceutiche", 
-            "Tossicologia", "Chimica degli Alimenti", "Farmacognosia",
-            # Quinto Anno e Opzionali
-            "Farmacia Clinica", "Saggi e Dosaggi dei Farmaci", "Biochimica Applicata", 
-            "Fitoterapia", "Igiene"
-        ])
-        
-        file_sfida = st.file_uploader("Carica il materiale della sfida", type=['pdf', 'jpg', 'png'], key="file_arena")
-        
-        if st.button("Genera Arena 🏟️") and file_sfida:
-            with st.spinner("L'IA sta preparando il ring..."):
-                # 1. Estraiamo il testo (usiamo Gemini per la vista)
-                contenuti = ["Estrai tutto il testo per una sfida tra studenti:"]
-                if file_sfida.type == "application/pdf":
-                    reader = PyPDF2.PdfReader(file_sfida)
-                    testo_arena = "".join([page.extract_text() for page in reader.pages])
+                st.divider()
+                
+                is_host = (st.session_state.utente_loggato.id == sfida['host_id'])
+                colonna_punteggio = "punteggio_host" if is_host else "punteggio_guest"
+                
+                col1, col2 = st.columns(2)
+                col1.metric("🔴 Punteggio Host", f"{sfida['punteggio_host']} / 300")
+                col2.metric("🔵 Punteggio Sfidante", f"{sfida['punteggio_guest']} / 300")
+                
+                st.info(f"🏟️ ARENA: {sfida['materia']} | PIN: {sfida['pin']}")
+                
+                domande = sfida['domande_json']
+                if "indice_domanda" not in st.session_state: st.session_state.indice_domanda = 0
+                indice = st.session_state.indice_domanda
+                
+                if indice < len(domande):
+                    d = domande[indice]
+                    st.subheader(f"Domanda {indice + 1} di 10")
+                    st.markdown(f"### {d['domanda']}")
+                    
+                    # Domande Multiple
+                    if d.get("tipo") == "multipla":
+                        scelta = st.radio("Scegli la risposta corretta:", d.get('opzioni', []), key=f"radio_{indice}")
+                        if st.button("Conferma Risposta ✅", key=f"btn_m_{indice}"):
+                            punti_vinti = 30 if scelta == d.get('corretta') else 0
+                            if punti_vinti == 30: st.success("🎯 Esatto! +30 punti")
+                            else: st.error(f"❌ Sbagliato! La corretta era: {d.get('corretta')}")
+                            
+                            nuovo_totale = sfida[colonna_punteggio] + punti_vinti
+                            supabase.table("sfide_multiplayer").update({colonna_punteggio: nuovo_totale}).eq("id", sfida['id']).execute()
+                            time.sleep(2)
+                            st.session_state.indice_domanda += 1
+                            st.rerun()
+
+                    # Domande Aperte
+                    else:
+                        risposta = st.text_area("Scrivi la tua risposta:", key=f"text_{indice}")
+                        if st.button("Consegna al Prof 📝", key=f"btn_a_{indice}"):
+                            with st.spinner("Il professore sta correggendo..."):
+                                prompt_voto = f"""Valuta questa risposta dello studente: '{risposta}'.
+Domanda: '{d['domanda']}'.
+Basati su questo testo: {sfida['appunti_testo'][:2000]}.
+Dai SOLO un voto da 1 a 30 (scrivi solo il numero, niente altro testo)."""
+                                try:
+                                    voto_str = genera_testo_con_fallback(prompt_voto).strip()
+                                    voto = int(''.join(filter(str.isdigit, voto_str))) 
+                                    if voto > 30: voto = 30
+                                except: voto = 15
+                                    
+                                st.success(f"🎓 Voto del professore: {voto}/30!")
+                                nuovo_totale = sfida[colonna_punteggio] + voto
+                                supabase.table("sfide_multiplayer").update({colonna_punteggio: nuovo_totale}).eq("id", sfida['id']).execute()
+                                time.sleep(2)
+                                st.session_state.indice_domanda += 1
+                                st.rerun()
                 else:
-                    testo_arena = Image.open(file_sfida)
-                
-                # 2. Generiamo le domande in formato JSON (per essere leggibili dal codice)
-                prompt_quiz = f"""Genera 3 domande a risposta multipla su questo testo di {materia}.
-                Rispondi SOLO con un formato JSON così:
-                [
-                  {{"domanda": "...", "opzioni": ["A", "B", "C"], "corretta": "A"}},
-                  ...
-                ]
-                Testo: {testo_arena[:2000]}"""
-                
-                quiz_raw = genera_testo_con_fallback(prompt_quiz)
-                
-                # Pulizia del testo se l'IA aggiunge chiacchiere (succede con Llama)
-                quiz_pulito = quiz_raw.strip().replace("```json", "").replace("```", "")
-                
-                # 3. Creiamo il PIN e salviamo su Supabase
-                nuovo_pin = str(random.randint(1000, 9999))
-                try:
-                    supabase.table("sfide_multiplayer").insert({
-                        "pin": nuovo_pin,
-                        "materia": materia,
-                        "host_id": st.session_state.utente_loggato.id,
-                        "appunti_testo": str(testo_arena)[:3000],
-                        "domande_json": json.loads(quiz_pulito),
-                        "stato": "waiting"
-                    }).execute()
-                    st.success(f"🔥 Arena Creata! Dai questo PIN al tuo collega: **{nuovo_pin}**")
-                    st.info("Resta in questa pagina, l'app si aggiornerà quando il tuo avversario entrerà.")
-                except Exception as e:
-                    st.error(f"Errore creazione arena: {e}")
-
-    else: # --- UNISCITI A SFIDA ---
-        pin_inserito = st.text_input("Inserisci il PIN di 4 cifre:")
-        if st.button("Entra nel Ring 🥊"):
-            try:
-                # Cerchiamo la sfida
-                sfida = supabase.table("sfide_multiplayer").select("*").eq("pin", pin_inserito).eq("stato", "waiting").execute()
-                
-                if sfida.data:
-                    id_sfida = sfida.data[0]['id']
-                    # Ci registriamo come Guest e cambiamo stato
-                    supabase.table("sfide_multiplayer").update({
-                        "guest_id": st.session_state.utente_loggato.id,
-                        "stato": "playing"
-                    }).eq("id", id_sfida).execute()
-                    st.success("✅ Sei dentro! Preparati alla prima domanda...")
-                    st.rerun()
-                else:
-                    st.error("PIN non trovato o sfida già iniziata.")
-            except Exception as e:
-                st.error(f"Errore: {e}")
-                prompt_prof = f"""Sei un professore universitario rigoroso. 
-Devi interrogare lo studente basandoti ESCLUSIVAMENTE su questi appunti: 
-{st.session_state.testo_pulito_studente[:3000]}
-
-REGOLE TASSATIVE:
-1. Fai UNA SOLA domanda alla volta. Sii estremamente sintetico e attinente al testo.
-2. ASSOLUTAMENTE NON chiedere collegamenti con argomenti esterni e NON fare salti logici strani.
-3. Se lo studente sta rispondendo a una tua domanda, PRIMA valuta la sua risposta dandogli un voto da 1 a 30 (trentesimi), correggi in una riga l'eventuale errore, e POI fai la domanda successiva.
-
-Storico Chat: {st.session_state.messaggi_chat}"""
-            
-            try:
-                # USIAMO IL CENTRALINO!
-                risposta_prof = genera_testo_con_fallback(prompt_prof)
-                with st.chat_message("assistant"): st.markdown(risposta_prof)
-                st.session_state.messaggi_chat.append({"ruolo": "assistant", "contenuto": risposta_prof})
-            except Exception as e:
-                st.error(f"Errore Chat: {e}")
-            else:
-                st.warning("Carica prima qualcosa in Fase 1!")
+                    st.balloons()
+                    st.success("🏁 Sfida terminata! Controlla il punteggio in alto per vedere chi ha vinto!")
+                    if st.button("Esci dall'Arena"):
+                        del st.session_state.id_sfida_attiva
+                        st.rerun()
