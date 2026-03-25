@@ -11,9 +11,12 @@ from supabase import create_client, Client
 # --- 1. SICUREZZA E CONFIGURAZIONE ---
 api_key = os.getenv("GEMINI_API_KEY")
 # --- CONFIGURAZIONE SUPABASE ---
-supabase_url = st.secrets["https://ofljlrtssnawuzbgfmto.supabase.com"]
-supabase_key = st.secrets["eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9mbGpscnRzc25hd3V6YmdmbXRvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ0Mjk0MzcsImV4cCI6MjA5MDAwNTQzN30.tErsqeL80N37VHo0oIBwuXHwqLAkwAMRphJj5PAC3HU"]
+# NON incollare l'URL qui! Usa il nome della chiave che hai messo nei Secrets
+supabase_url = st.secrets["SUPABASE_URL"] 
+supabase_key = st.secrets["SUPABASE_KEY"]
+
 supabase: Client = create_client(supabase_url, supabase_key)
+    raise KeyError(_missing_key_error_message(key))
 # --- GESTIONE SESSIONE UTENTE ---
 if "utente_loggato" not in st.session_state:
     st.session_state.utente_loggato = None
