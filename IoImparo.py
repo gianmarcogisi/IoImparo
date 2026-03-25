@@ -388,44 +388,93 @@ Dai SOLO un voto da 1 a 30 (scrivi solo il numero, niente altro testo)."""
 # --- NUOVA FASE 5 (TRACKER RANKED) ---
 with tab5:
     st.subheader("🏆 Il Tuo Profilo Ranked")
-    st.write("Spremi appunti e vinci sfide nell'Arena per salire di livello!")
+    st.write("Spremi appunti e vinci sfide nell'Arena per scalare le classifiche dell'Ateneo!")
     
     with st.spinner("Calcolo delle statistiche in corso..."):
         try:
+            # 1. DATI APPUNTI (I Secchioni)
             res_appunti = supabase.table("appunti_salvati").select("*").eq("user_id", st.session_state.utente_loggato.id).execute()
             appunti_creati = len(res_appunti.data)
             
-            res_host = supabase.table("sfide_multiplayer").select("punteggio_host").eq("host_id", st.session_state.utente_loggato.id).execute()
-            res_guest = supabase.table("sfide_multiplayer").select("punteggio_guest").eq("guest_id", st.session_state.utente_loggato.id).execute()
+            # 2. DATI SFIDE (I Combattenti - scarichiamo entrambi i punteggi per capire chi ha vinto)
+            res_host = supabase.table("sfide_multiplayer").select("punteggio_host, punteggio_guest").eq("host_id", st.session_state.utente_loggato.id).execute()
+            res_guest = supabase.table("sfide_multiplayer").select("punteggio_host, punteggio_guest").eq("guest_id", st.session_state.utente_loggato.id).execute()
             
             punti_da_host = sum([x.get('punteggio_host', 0) for x in res_host.data])
             punti_da_guest = sum([x.get('punteggio_guest', 0) for x in res_guest.data])
             sfide_giocate = len(res_host.data) + len(res_guest.data)
-            
             punti_totali = punti_da_host + punti_da_guest
             
-            if punti_totali < 100: rank, icona, prox = "Novizio Speziale", "🌱", 100
-            elif punti_totali < 500: rank, icona, prox = "Apprendista Alchimista", "🧪", 500
-            elif punti_totali < 1500: rank, icona, prox = "Dottore in Farmacia", "👨‍⚕️", 1500
-            elif punti_totali < 3000: rank, icona, prox = "Ricercatore Senior", "🔬", 3000
-            else: rank, icona, prox = "Scienziato Supremo", "🧬", punti_totali
+            # Calcolo Vittorie (Se il tuo punteggio è maggiore di quello dell'avversario)
+            vittorie = 0
+            for sfida in res_host.data:
+                if sfida.get('punteggio_host', 0) > sfida.get('punteggio_guest', 0): vittorie += 1
+            for sfida in res_guest.data:
+                if sfida.get('punteggio_guest', 0) > sfida.get('punteggio_host', 0): vittorie += 1
             
-            st.markdown(f"### Grado Attuale: {icona} **{rank}**")
+            # 3. SISTEMA LIVELLI - ARENA (I Combattimenti) - 11 Gradi
+            gradi_arena = [
+                (100, "Novizio Speziale", "🌱"), (300, "Apprendista Alchimista", "🧪"),
+                (600, "Assistente di Laboratorio", "⚗️"), (1000, "Studente di Farmacia", "📚"),
+                (1500, "Dottore Magistrale", "🎓"), (2200, "Farmacista Clinico", "⚕️"),
+                (3000, "Ricercatore Universitario", "🔬"), (4000, "Tossicologo Esperto", "☠️"),
+                (5500, "Chimico Farmaceutico", "💊"), (7500, "Direttore di Laboratorio", "🏛️")
+            ]
+            rank_arena, icona_arena, prox_arena = "Scienziato Supremo", "🧬", punti_totali
+            for limite, nome, icona in gradi_arena:
+                if punti_totali < limite:
+                    rank_arena, icona_arena, prox_arena = nome, icona, limite
+                    break
             
-            if rank != "Scienziato Supremo":
-                progresso = punti_totali / prox
-                st.progress(min(progresso, 1.0))
-                st.caption(f"Ti mancano {prox - punti_totali} punti per il prossimo livello!")
-            else:
-                st.progress(1.0)
-                st.caption("Hai raggiunto il livello massimo! Sei una leggenda.")
-            
+            # 4. SISTEMA LIVELLI - STUDIO (I Riassunti) - 11 Gradi
+            gradi_riassunti = [
+                (3, "Matricola Smarrita", "🎒"), (10, "Evidenziatore Seriale", "🖍️"),
+                (20, "Divoratore di Dispense", "📄"), (35, "Macchina da Riassunti", "⚙️"),
+                (50, "Topo da Biblioteca", "🐁"), (75, "Archiviologo Supremo", "🗄️"),
+                (100, "Discepolo di Galeno", "📜"), (150, "Mente Fotografica", "📸"),
+                (200, "Saggio dell'Ateneo", "🦉"), (300, "Oracolo della Sapienza", "🔮")
+            ]
+            rank_riassunti, icona_riassunti, prox_riassunti = "Divinità Accademica", "👑", appunti_creati
+            for limite, nome, icona in gradi_riassunti:
+                if appunti_creati < limite:
+                    rank_riassunti, icona_riassunti, prox_riassunti = nome, icona, limite
+                    break
+
+            # --- RENDER DELL'INTERFACCIA ---
             st.divider()
             
-            c1, c2, c3 = st.columns(3)
+            # Mettiamo i due Rank affiancati per fare scena
+            col_rank1, col_rank2 = st.columns(2)
+            
+            with col_rank1:
+                st.markdown(f"### {icona_arena} Grado Arena: **{rank_arena}**")
+                if rank_arena != "Scienziato Supremo":
+                    st.progress(min(punti_totali / prox_arena, 1.0))
+                    st.caption(f"Punti: {punti_totali}/{prox_arena} - Te ne mancano {prox_arena - punti_totali} per il prossimo grado!")
+                else:
+                    st.progress(1.0)
+                    st.caption(f"Punti: {punti_totali} - Livello Massimo Raggiunto!")
+                    
+            with col_rank2:
+                st.markdown(f"### {icona_riassunti} Grado Studio: **{rank_riassunti}**")
+                if rank_riassunti != "Divinità Accademica":
+                    st.progress(min(appunti_creati / prox_riassunti, 1.0))
+                    st.caption(f"Riassunti: {appunti_creati}/{prox_riassunti} - Te ne mancano {prox_riassunti - appunti_creati} per il prossimo grado!")
+                else:
+                    st.progress(1.0)
+                    st.caption(f"Riassunti: {appunti_creati} - Livello Massimo Raggiunto!")
+
+            st.divider()
+            
+            # Le metriche in basso (ora sono 4)
+            c1, c2, c3, c4 = st.columns(4)
             c1.metric(label="Punti Arena Totali", value=punti_totali, delta="Competitivo")
             c2.metric(label="Riassunti Generati", value=appunti_creati, delta="Secchione")
             c3.metric(label="Sfide Giocate", value=sfide_giocate)
+            
+            # Calcoliamo il Win Rate (la percentuale di vittorie)
+            winrate = int((vittorie / sfide_giocate) * 100) if sfide_giocate > 0 else 0
+            c4.metric(label="Sfide Vinte 🏆", value=vittorie, delta=f"{winrate}% Win Rate")
 
         except Exception as e:
             st.error(f"Errore nel caricamento del profilo: {e}")
