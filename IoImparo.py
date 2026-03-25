@@ -232,9 +232,21 @@ with tab4:
     scelta_arena = st.radio("Cosa vuoi fare?", ["Crea Sfida 🏗️", "Unisciti a Sfida ⚔️"], horizontal=True)
 
     if scelta_arena == "Crea Sfida 🏗️":
-        materia = st.selectbox("Seleziona la materia:", [
-            "Chimica Farmaceutica", "Farmacologia", "Tecnologia Farmaceutica", 
-            "Biochimica", "Chimica Organica", "Farmacognosia", "Anatomia"
+materia = st.selectbox("Seleziona l'esame della sfida:", [
+            # Primo Anno
+            "Chimica Generale ed Inorganica", "Biologia Animale", "Biologia Vegetale", 
+            "Fisica", "Matematica ed Informatica", "Anatomia Umana",
+            # Secondo Anno
+            "Chimica Organica", "Microbiologia", "Fisiologia Umana", "Analisi dei Medicinali I",
+            # Terzo Anno
+            "Biochimica", "Farmacologia e Farmacoterapia", "Analisi dei Medicinali II", 
+            "Patologia Generale", "Chimica Farmaceutica e Tossicologica I",
+            # Quarto Anno
+            "Chimica Farmaceutica e Tossicologica II", "Tecnologia e Legislazione Farmaceutiche", 
+            "Tossicologia", "Chimica degli Alimenti", "Farmacognosia",
+            # Quinto Anno e Opzionali
+            "Farmacia Clinica", "Saggi e Dosaggi dei Farmaci", "Biochimica Applicata", 
+            "Fitoterapia", "Igiene"
         ])
         
         file_sfida = st.file_uploader("Carica il materiale della sfida", type=['pdf', 'jpg', 'png'], key="file_arena")
