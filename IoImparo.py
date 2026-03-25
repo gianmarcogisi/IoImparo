@@ -90,9 +90,9 @@ with tab1:
         
         # Mostriamo il caricatore giusto in base alla scelta
         if tipo_file == "📄 Documento PDF":
-            file_input = st.file_uploader("Seleziona il tuo PDF", type=['pdf'], key="elab_pdf")
+            file_input = st.file_uploader("👉 Clicca su 'Browse files' qui sotto per scegliere il PDF", type=['pdf'], key="elab_pdf")
         else:
-            file_input = st.file_uploader("Scatta o seleziona una foto", type=['png', 'jpg', 'jpeg'], key="elab_foto")
+            file_input = st.file_uploader("👉 Clicca su 'Browse files' qui sotto per scattare la foto", type=['png', 'jpg', 'jpeg'], key="elab_foto")
             
         bottone_elabora = st.button("Trascrivi, Schematizza & Riassumi 🪄", use_container_width=True)
     with col2:
