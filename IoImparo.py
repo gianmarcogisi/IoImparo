@@ -151,6 +151,20 @@ with tab1:
                     response = client.models.generate_content(model='gemini-2.5-flash', contents=contenuti)
                     st.session_state.testo_pulito_studente = response.text
                     st.session_state.riassunto_pdf = genera_pdf_scaricabile(response.text)
+                    # --- SALVATAGGIO IN CASSAFORTE (SUPABASE) ---
+                    try:
+                        # Prepariamo i dati: chi è l'utente e qual è il testo
+                        dati_da_salvare = {
+                            "user_id": st.session_state.utente_loggato.id,
+                            "testo_estratto": st.session_state.testo_pulito_studente
+                        }
+                        # Li spariamo nel database appena creato
+                        supabase.table("appunti_salvati").insert(dati_da_salvare).execute()
+                        # Un piccolo avviso per far capire all'utente che è tutto salvato
+                        st.toast("💾 Appunti salvati nel tuo database segreto!", icon="✅")
+                    except Exception as errore_db:
+                        st.error(f"Errore nel salvataggio su Supabase: {errore_db}")
+                    # ----------------------------------------------
                     st.markdown(response.text)
                     st.balloons()
                 except Exception as e:
