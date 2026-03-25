@@ -219,7 +219,7 @@ with tab3:
         for m in st.session_state.messaggi_chat:
             with st.chat_message(m["ruolo"]): st.markdown(m["contenuto"])
         
-        inp = st.chat_input("Rispondi al prof...")
+        inp = st.chat_input("Rispondi al prof... (Max 500 caratteri)", max_chars=500)
         if inp:
             st.chat_message("user").markdown(inp)
             st.session_state.messaggi_chat.append({"ruolo": "user", "contenuto": inp})
