@@ -144,26 +144,52 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
 ])
 
 with tab1:
-    col1, col2 = st.columns([1, 2])
+    col1, colw2 = st.columns([1, 2])
     with col1:
         st.subheader("📥 Carica Materiale")
         tipo_file = st.radio("Formato:", ["📄 PDF", "📸 Foto"], horizontal=True)
-        file_input = st.file_uploader("Scegli file", type=['pdf'] if tipo_file == "📄 PDF" else ['png', 'jpg', 'jpeg'], key="file_up")
+        
+        # 1. ABILITIAMO IL MULTIPLO SOLO PER LE FOTO
+        is_foto = (tipo_file == "📸 Foto")
+        file_input = st.file_uploader(
+            "Scegli file (Max 50 foto)" if is_foto else "Scegli file (Max 1 PDF)", 
+            type=['png', 'jpg', 'jpeg'] if is_foto else ['pdf'], 
+            accept_multiple_files=is_foto, # <-- LA MAGIA È QUI
+            key="file_up"
+        )
         bottone_elabora = st.button("Spremi Appunti 🪄", type="primary", use_container_width=True)
 
     with col2:
         st.subheader("📄 Risultato")
-        if bottone_elabora and file_input is not None:
-            if file_input.size > 10 * 1024 * 1024:
-                st.error("🚨 File troppo grande. Max 10 MB.")
-                st.stop()
+        
+        # 2. GESTIONE DELLA LISTA DI FOTO O DEL SINGOLO PDF
+        file_valido = len(file_input) > 0 if is_foto and file_input is not None else file_input is not None
+        
+        if bottone_elabora and file_valido:
+            # --- CONTROLLO LIMITI DI SICUREZZA ---
+            if is_foto:
+                if len(file_input) > 50:
+                    st.error("🚨 Troppe foto! Puoi caricare massimo 50 immagini alla volta.")
+                    st.stop()
+                
+                # Calcoliamo il peso di tutte le foto sommate
+                dimensione_totale = sum([f.size for f in file_input])
+                if dimensione_totale > 50 * 1024 * 1024: # Alzato a 50 MB per supportare 50 foto
+                    st.error("🚨 Le foto pesano troppo in totale. Max 50 MB.")
+                    st.stop()
+            else:
+                if file_input.size > 15 * 1024 * 1024: # 15 MB per i PDF
+                    st.error("🚨 PDF troppo grande. Max 15 MB.")
+                    st.stop()
+
+            # --- TIMER ANTI-SPAM ---
             if "ultimo_utilizzo" not in st.session_state: st.session_state.ultimo_utilizzo = 0
             if time.time() - st.session_state.ultimo_utilizzo < 30:
                 st.warning("⏱️ Attendi 30 secondi tra un caricamento e l'altro.")
                 st.stop()
             st.session_state.ultimo_utilizzo = time.time()
 
-            with st.spinner("Lavorando con Gemini Vision..."):
+            with st.spinner("Lavorando con Gemini Vision (potrebbe volerci un po' per tante foto)..."):
                 try:
                     contenuti = ["""Agisci come il miglior assistente universitario del mondo. Analizza il materiale fornito e scrivi un documento diviso ESATTAMENTE in queste 3 sezioni ben visibili:
 --- SEZIONE 1: TRASCRIZIONE ---
@@ -173,10 +199,13 @@ with tab1:
 --- SEZIONE 3: RIASSUNTO COMPLETO ---
 (Scrivi un riassunto discorsivo, chiaro e approfondito per studiare)."""]
                     
-                    if file_input.type == "application/pdf":
+                    # 3. CICLO PER CARICARE TUTTE LE FOTO IN GEMINI
+                    if is_foto:
+                        for foto in file_input:
+                            contenuti.append(Image.open(foto))
+                    else:
                         reader = PyPDF2.PdfReader(file_input)
                         contenuti.append("".join([page.extract_text() for page in reader.pages]))
-                    else: contenuti.append(Image.open(file_input))
 
                     response = client.models.generate_content(model='gemini-2.5-flash', contents=contenuti)
                     st.session_state.testo_pulito_studente = response.text
