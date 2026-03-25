@@ -193,13 +193,16 @@ with tab1:
 
             with st.spinner("Lavorando con Gemini Vision (sto leggendo un sacco di dati, abbi pazienza)..."):
                 try:
-                    contenuti = ["""Agisci come il miglior assistente universitario del mondo. Analizza il materiale fornito e scrivi un documento diviso ESATTAMENTE in queste 3 sezioni ben visibili:
+                    contenuti = ["""Agisci come il miglior assistente universitario del mondo, esperto in Visual Learning (apprendimento visivo). Analizza il materiale fornito e scrivi un documento diviso ESATTAMENTE in queste 3 sezioni ben visibili:
+
 --- SEZIONE 1: TRASCRIZIONE ---
 (Se ti ho fornito un'immagine, trascrivi fedelmente tutto il testo che vedi. Se è un PDF testuale, scrivi semplicemente: 'Documento digitale riconosciuto').
---- SEZIONE 2: SCHEMA CONCETTUALE ---
-(Crea uno schema a punti dettagliato, estraendo i concetti chiave e le definizioni più importanti).
+
+--- SEZIONE 2: SCHEMA CONCETTUALE VISIVO ---
+(ABBANDONA la noiosa lista a punti! Crea una mappa concettuale testuale. Usa simboli come ├──, └── e frecce ➡️ per creare diagrammi di flusso ad albero. Se ci sono elementi da confrontare, disegna una bella Tabella Markdown. Organizza le informazioni in modo che l'occhio colga subito la gerarchia dei concetti).
+
 --- SEZIONE 3: RIASSUNTO COMPLETO ---
-(Scrivi un riassunto discorsivo, chiaro e approfondito per studiare)."""]
+(Scrivi un riassunto discorsivo, chiaro e approfondito per studiare, evidenziando in grassetto le parole chiave)."""]
                     
                     # 4. CICLO PER CARICARE TUTTE LE FOTO IN GEMINI
                     if is_foto:
