@@ -156,10 +156,17 @@ with tab1:
 
             with st.spinner("Lavorando con Gemini Vision..."):
                 try:
-                    contenuti = ["""Analizza questo materiale. 
-                    1. TRASCRIZIONE: se immagine, trascrivi il testo. 
-                    2. SCHEMA: crea uno schema a punti. 
-                    3. RIASSUNTO: scrivi un riassunto chiaro."""]
+                    contenuti = ["""Agisci come il miglior assistente universitario del mondo. Analizza il materiale fornito e scrivi un documento diviso ESATTAMENTE in queste 3 sezioni ben visibili:
+
+--- SEZIONE 1: TRASCRIZIONE ---
+(Se ti ho fornito un'immagine, trascrivi fedelmente tutto il testo che vedi. Se è un PDF testuale, scrivi semplicemente: 'Documento digitale riconosciuto').
+
+--- SEZIONE 2: SCHEMA CONCETTUALE ---
+(Crea uno schema a punti dettagliato, estraendo i concetti chiave e le definizioni più importanti).
+
+--- SEZIONE 3: RIASSUNTO COMPLETO ---
+(Scrivi un riassunto discorsivo, chiaro e approfondito per studiare).
+"""]
                     
                     if file_input.type == "application/pdf":
                         reader = PyPDF2.PdfReader(file_input)
