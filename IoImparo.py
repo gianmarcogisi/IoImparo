@@ -7,6 +7,7 @@ from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import letter
 import io
 from supabase import create_client, Client
+import time
 
 # --- 1. CONFIGURAZIONE PAGINA (Deve essere la prima istruzione Streamlit) ---
 NOME_APP = "IoImparo 🎓"
@@ -143,9 +144,29 @@ with tab1:
     with col2:
         st.subheader("📄 Risultato")
         if bottone_elabora and file_input is not None:
+            # --- DIFESA 1: CONTROLLO PESO FILE (Max 10 MB) ---
+            if file_input.size > 10 * 1024 * 1024:
+                st.error("🚨 Alt! Il file è troppo grande. Massimo 10 MB consentiti.")
+                st.stop() # Ferma tutto il codice qui
+            # -------------------------------------------------
+
+            # --- DIFESA 2: RATE LIMITING (Anti-Spam API) ---
+            if "ultimo_utilizzo" not in st.session_state:
+                st.session_state.ultimo_utilizzo = 0
+            
+            # Se sono passati meno di 30 secondi dall'ultimo click...
+            if time.time() - st.session_state.ultimo_utilizzo < 30:
+                st.warning("⏱️ Ehi, respira! I server si stanno raffreddando. Riprova tra 30 secondi.")
+                st.stop()
+            
+            # Aggiorniamo il timer
+            st.session_state.ultimo_utilizzo = time.time()
+            # -------------------------------------------------
+
             with st.spinner("Lavorando..."):
+                # ... Qui sotto lasci il tuo blocco try/except intatto ...
                 try:
-                    contenuti = ["""Analizza questo materiale. 
+                    contenuti = ["""Analizza questo materiale...
                     1. TRASCRIZIONE: se immagine, trascrivi il testo. 
                     2. SCHEMA: crea uno schema a punti. 
                     3. RIASSUNTO: scrivi un riassunto chiaro."""]
