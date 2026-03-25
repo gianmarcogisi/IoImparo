@@ -42,24 +42,42 @@ if "access_token" in st.session_state:
     except Exception:
         pass 
 
-# --- IL CENTRALINO MULTI-MODELLO ---
-def genera_testo_con_fallback(prompt):
+# --- I NUOVI MOTORI INTELLIGENTI ---
+
+# Motore 1: Gemini (Per lavori pesanti: Flashcard, JSON, Arena)
+def genera_testo_gemini(prompt):
+    max_tentativi = 3
+    attesa = 2
+    for tentativo in range(max_tentativi):
+        try:
+            time.sleep(1) # Piccolo respiro
+            response = client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
+            return response.text
+        except Exception as e:
+            if tentativo < max_tentativi - 1 and ("429" in str(e) or "503" in str(e)):
+                st.toast(f"Gemini sta pensando... riprovo in {attesa}s", icon="⏳")
+                time.sleep(attesa)
+                attesa *= 2
+            else:
+                raise e
+
+# Motore 2: Groq con Fallback (Per la chat veloce col Prof)
+def chat_professore_con_fallback(prompt):
     try:
-# Facciamo respirare il server per 2 secondi prima di inviare
-        time.sleep(2) 
-        response = client.models.generate_content(model='gemini-2.5-flash', contents=contenuti)
-        response = client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
-        return response.text
+        # 1. Prova con Groq (Veloce e sarcastico)
+        chat_completion = groq_client.chat.completions.create(
+            messages=[{"role": "user", "content": prompt}],
+            model="llama-3.3-70b-versatile",
+        )
+        return chat_completion.choices[0].message.content
     except Exception as e:
-        if "503" in str(e) or "429" in str(e):
-            st.toast("Google intasato. Attivo Llama 3... 🚀", icon="🦙")
-            chat_completion = groq_client.chat.completions.create(
-                messages=[{"role": "user", "content": prompt}],
-                model = "llama-3.3-70b-versatile",
-            )
-            return chat_completion.choices[0].message.content
-        else:
-            raise e
+        # 2. Se Groq fallisce (limite messaggi), entra la ruota di scorta Gemini!
+        st.toast("Il Prof ha finito la voce su Groq. Interviene il supplente Gemini! 🚀", icon="🔄")
+        try:
+            response = client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
+            return response.text
+        except Exception as e_gemini:
+            raise e_gemini
 
 # --- 3. GESTIONE SESSIONE UTENTE ---
 if "utente_loggato" not in st.session_state: st.session_state.utente_loggato = None
@@ -101,7 +119,7 @@ with col_titolo:
     st.title(f"🎓 Centrale Operativa {NOME_APP}")
 
 with col_profilo:
-    st.write("") # Piccolo trucco per allineare il bottone in basso
+    st.write("") 
     with st.popover("👤 Area Riservata", use_container_width=True):
         st.image("https://img.icons8.com/fluent/100/000000/graduation-cap.png", width=50)
         st.write(f"Socio:\n`{st.session_state.utente_loggato.email}`")
@@ -135,8 +153,7 @@ def genera_pdf_scaricabile(testo):
     buf.seek(0)
     return buf
 
-
-# NUOVO TABS CHE INCLUDE LA FASE 5
+# NUOVO TABS
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "🗺️ Fase 1: Elabora & PDF", 
     "⚡ Fase 2: Flashcard", 
@@ -151,7 +168,6 @@ with tab1:
         st.subheader("📥 Carica Materiale")
         tipo_file = st.radio("Formato:", ["📄 PDF", "📸 Foto"], horizontal=True)
         
-        # 1. ABILITIAMO IL MULTIPLO SOLO PER LE FOTO
         is_foto = (tipo_file == "📸 Foto")
         file_input = st.file_uploader(
             "Scegli file (Max 150 foto)" if is_foto else "Scegli file (Max 1 PDF)", 
@@ -160,7 +176,6 @@ with tab1:
             key="file_up"
         )
         
-        # 2. CONTROLLO IMMEDIATO E BLOCCO BOTTONE (Limite alzato a 150)
         troppe_foto = False
         if is_foto and isinstance(file_input, list) and len(file_input) > 150:
             st.error(f"🚨 Hai inserito {len(file_input)} foto! Rimuovine {len(file_input) - 150} per continuare.")
@@ -170,24 +185,19 @@ with tab1:
 
     with col2:
         st.subheader("📄 Risultato")
-        
-        # 3. GESTIONE DELLA LISTA DI FOTO O DEL SINGOLO PDF
         file_valido = len(file_input) > 0 if is_foto and file_input is not None else file_input is not None
         
         if bottone_elabora and file_valido:
-            # --- CONTROLLO LIMITI DI SICUREZZA ---
             if is_foto:
-                # Calcoliamo il peso di tutte le foto sommate (Alzato a 150 MB)
                 dimensione_totale = sum([f.size for f in file_input])
                 if dimensione_totale > 150 * 1024 * 1024: 
                     st.error("🚨 Le foto pesano troppo in totale. Max 150 MB.")
                     st.stop()
             else:
-                if file_input.size > 15 * 1024 * 1024: # 15 MB per i PDF
+                if file_input.size > 15 * 1024 * 1024: 
                     st.error("🚨 PDF troppo grande. Max 15 MB.")
                     st.stop()
 
-            # --- TIMER ANTI-SPAM ---
             if "ultimo_utilizzo" not in st.session_state: st.session_state.ultimo_utilizzo = 0
             if time.time() - st.session_state.ultimo_utilizzo < 30:
                 st.warning("⏱️ Attendi 30 secondi tra un caricamento e l'altro.")
@@ -207,7 +217,6 @@ with tab1:
 --- SEZIONE 3: RIASSUNTO COMPLETO ---
 (Scrivi un riassunto discorsivo, chiaro e approfondito per studiare, evidenziando in grassetto le parole chiave)."""]
                     
-                    # 4. CICLO PER CARICARE TUTTE LE FOTO IN GEMINI
                     if is_foto:
                         for foto in file_input:
                             contenuti.append(Image.open(foto))
@@ -220,36 +229,25 @@ with tab1:
                     st.session_state.riassunto_pdf = genera_pdf_scaricabile(response.text)
                     
                     try:
-                        # 1. Salvataggio del nuovo appunto
                         supabase.table("appunti_salvati").insert({
                             "user_id": st.session_state.utente_loggato.id,
                             "testo_estratto": st.session_state.testo_pulito_studente
                         }).execute()
                         st.toast("💾 Salvato nel database!", icon="✅")
                         
-                        # --- 2. SISTEMA DI PULIZIA AUTOMATICA (SALVA-SPAZIO E SALVA-RANK) ---
-                        MAX_APPUNTI_MEMORIA = 25 # Quanti appunti "interi" vogliamo tenere in memoria per utente
-                        
-                        # Chiediamo al DB tutti gli appunti di questo utente, dal più vecchio al più nuovo
+                        MAX_APPUNTI_MEMORIA = 25 
                         res_storico = supabase.table("appunti_salvati").select("id, created_at, testo_estratto").eq("user_id", st.session_state.utente_loggato.id).order("created_at").execute()
                         
-                        # Se ha superato il limite (es. ha 26 appunti)
                         if len(res_storico.data) > MAX_APPUNTI_MEMORIA:
-                            # Calcoliamo quanti ne dobbiamo svuotare
                             appunti_da_svuotare = len(res_storico.data) - MAX_APPUNTI_MEMORIA
-                            
-                            # Prendiamo gli ID dei più vecchi che NON sono già stati archiviati
                             appunti_vecchi = [x for x in res_storico.data if x['testo_estratto'] != "🗄️ [Contenuto archiviato automaticamente per liberare spazio nel database]"]
                             
                             if len(appunti_vecchi) > 0:
                                 ids_da_archiviare = [record['id'] for record in appunti_vecchi[:appunti_da_svuotare]]
-                                
-                                # Svuotiamo il testo per liberare i Megabytes!
                                 for old_id in ids_da_archiviare:
                                     supabase.table("appunti_salvati").update({
                                         "testo_estratto": "🗄️ [Contenuto archiviato automaticamente per liberare spazio nel database]"
                                     }).eq("id", old_id).execute()
-                                
                                 st.toast(f"🧹 Spazio ottimizzato: {len(ids_da_archiviare)} appunti vecchi archiviati!", icon="♻️")
                                 
                     except Exception as e: 
@@ -268,12 +266,12 @@ with tab2:
     if st.session_state.testo_pulito_studente:
         if st.button("Genera Flashcard 🚀"):
             try:
-                testo_flashcard = genera_testo_con_fallback(f"Crea 5 flashcard domanda/risposta da qui: {st.session_state.testo_pulito_studente}")
+                # ORA USA GEMINI, MOLTO PIÙ ADATTO AI TESTI LUNGHI
+                testo_flashcard = genera_testo_gemini(f"Crea 5 flashcard domanda/risposta da qui: {st.session_state.testo_pulito_studente}")
                 st.info(testo_flashcard)
             except Exception as e: st.error(f"Errore generazione: {e}")
     else: st.warning("Carica prima qualcosa in Fase 1!")
 
-# --- FASE 3 AGGIORNATA (LAVAGNA VISIVA + PROFESSORE CATTIVO) ---
 with tab3:
     if st.session_state.testo_pulito_studente:
         st.markdown("Scrivi **'Iniziamo'** per far partire l'interrogazione.")
@@ -300,7 +298,8 @@ REGOLE TASSATIVE:
 Storico Chat: {st.session_state.messaggi_chat}"""
             
             try:
-                risposta_prof = genera_testo_con_fallback(prompt_prof)
+                # ORA USA GROQ PER VELOCITÀ, MA HA IL SALVAGENTE GEMINI
+                risposta_prof = chat_professore_con_fallback(prompt_prof)
                 with st.chat_message("assistant"): st.markdown(risposta_prof)
                 st.session_state.messaggi_chat.append({"ruolo": "assistant", "contenuto": risposta_prof})
             except Exception as e: st.error(f"Errore Chat: {e}")
@@ -339,10 +338,11 @@ Rispondi SOLO ed ESCLUSIVAMENTE con un array JSON avente questa struttura esatta
   {{"tipo": "multipla", "domanda": "...", "opzioni": ["A", "B", "C", "D"], "corretta": "A"}},
   {{"tipo": "aperta", "domanda": "..."}}
 ]
-Devono essere 10 elementi in totale (5 multipla, 5 aperta).
+Devono essere 10 elementi in totale (5 multipla, 5 aperta). Nessun testo prima o dopo l'array JSON.
 Testo: {str(testo_arena)[:3000]}"""
                         
-                        quiz_raw = genera_testo_con_fallback(prompt_quiz)
+                        # ORA USA GEMINI, SUPER AFFIDABILE PER IL JSON
+                        quiz_raw = genera_testo_gemini(prompt_quiz)
                         quiz_pulito = quiz_raw.strip().replace("```json", "").replace("```", "")
                         
                         nuovo_pin = str(random.randint(1000, 9999))
@@ -359,7 +359,7 @@ Testo: {str(testo_arena)[:3000]}"""
                         st.success(f"🔥 Arena Creata! Dai questo PIN: {nuovo_pin}")
                         time.sleep(2)
                         st.rerun()
-                    except Exception as e: st.error(f"Errore creazione arena: {e}")
+                    except Exception as e: st.error(f"Errore creazione arena (forse il testo era strano): {e}")
 
         else: # Unisciti a Sfida
             pin_inserito = st.text_input("Inserisci il PIN di 4 cifre:")
@@ -376,7 +376,6 @@ Testo: {str(testo_arena)[:3000]}"""
                 else: st.error("PIN non trovato o sfida già iniziata.")
 
     else:
-        # LOGICA DI COMBATTIMENTO
         res_live = supabase.table("sfide_multiplayer").select("*").eq("id", st.session_state.id_sfida_attiva).execute()
         
         if res_live.data:
@@ -410,21 +409,16 @@ Testo: {str(testo_arena)[:3000]}"""
                     st.subheader(f"Domanda {indice + 1} di 10")
                     st.markdown(f"### {d['domanda']}")
                     
-                    # Domande Multiple
                     if d.get("tipo") == "multipla":
                         scelta = st.radio("Scegli la risposta corretta:", d.get('opzioni', []), key=f"radio_{indice}")
                         if st.button("Conferma Risposta ✅", key=f"btn_m_{indice}"):
                             
-                            # --- LA MAGIA DI VISION PER IL BUG DELLE RISPOSTE ---
+                            # IL BUG FIX DELLE RISPOSTE E' QUI!
                             scelta_str = str(scelta).strip().lower()
                             corretta_str = str(d.get('corretta', '')).strip().lower()
                             
-                            # Controllo "a prova di bomba": 
-                            # Verifica se sono identiche, o se una è contenuta nell'altra (es. "c" dentro "c) acido")
                             is_esatta = (scelta_str == corretta_str) or (corretta_str in scelta_str) or (scelta_str in corretta_str)
-                            
                             punti_vinti = 30 if is_esatta else 0
-                            # ----------------------------------------------------
                             
                             if punti_vinti == 30: 
                                 st.success("🎯 Esatto! +30 punti")
@@ -437,7 +431,6 @@ Testo: {str(testo_arena)[:3000]}"""
                             st.session_state.indice_domanda += 1
                             st.rerun()
 
-                    # Domande Aperte (Voto blindato)
                     else:
                         risposta = st.text_area("Scrivi la tua risposta:", key=f"text_{indice}")
                         if st.button("Consegna al Prof 📝", key=f"btn_a_{indice}"):
@@ -449,9 +442,9 @@ REGOLE TASSATIVE PER IL VOTO:
 1. Dai SOLO un voto da 1 a 30 (scrivi solo il numero, niente altro testo).
 2. Se la risposta è composta da lettere a caso (es. 'fasd'), numeri a caso, è completamente fuori tema o palesemente errata, DEVI dare un voto da 1 a 3. NON regalare punti!"""
                                 try:
-                                    voto_str = genera_testo_con_fallback(prompt_voto).strip()
+                                    # ORA IL PROF USA GEMINI PER VALUTARE (Più preciso sul punteggio)
+                                    voto_str = genera_testo_gemini(prompt_voto).strip()
                                     numeri_estratti = ''.join(filter(str.isdigit, voto_str))
-                                    # Se trova dei numeri li usa, altrimenti bocciatura automatica a 1
                                     voto = int(numeri_estratti) if numeri_estratti else 1 
                                     if voto > 30: voto = 30
                                 except: voto = 1
@@ -469,18 +462,15 @@ REGOLE TASSATIVE PER IL VOTO:
                         del st.session_state.id_sfida_attiva
                         st.rerun()
 
-# --- NUOVA FASE 5 (TRACKER RANKED) ---
 with tab5:
     st.subheader("🏆 Il Tuo Profilo Ranked")
     st.write("Spremi appunti e vinci sfide nell'Arena per scalare le classifiche dell'Ateneo!")
     
     with st.spinner("Calcolo delle statistiche in corso..."):
         try:
-            # 1. DATI APPUNTI (I Secchioni)
             res_appunti = supabase.table("appunti_salvati").select("*").eq("user_id", st.session_state.utente_loggato.id).execute()
             appunti_creati = len(res_appunti.data)
             
-            # 2. DATI SFIDE (I Combattenti - scarichiamo entrambi i punteggi per capire chi ha vinto)
             res_host = supabase.table("sfide_multiplayer").select("punteggio_host, punteggio_guest").eq("host_id", st.session_state.utente_loggato.id).execute()
             res_guest = supabase.table("sfide_multiplayer").select("punteggio_host, punteggio_guest").eq("guest_id", st.session_state.utente_loggato.id).execute()
             
@@ -489,14 +479,12 @@ with tab5:
             sfide_giocate = len(res_host.data) + len(res_guest.data)
             punti_totali = punti_da_host + punti_da_guest
             
-            # Calcolo Vittorie (Se il tuo punteggio è maggiore di quello dell'avversario)
             vittorie = 0
             for sfida in res_host.data:
                 if sfida.get('punteggio_host', 0) > sfida.get('punteggio_guest', 0): vittorie += 1
             for sfida in res_guest.data:
                 if sfida.get('punteggio_guest', 0) > sfida.get('punteggio_host', 0): vittorie += 1
             
-            # 3. SISTEMA LIVELLI - ARENA (I Combattimenti) - 11 Gradi
             gradi_arena = [
                 (100, "Novizio Speziale", "🌱"), (300, "Apprendista Alchimista", "🧪"),
                 (600, "Assistente di Laboratorio", "⚗️"), (1000, "Studente di Farmacia", "📚"),
@@ -510,7 +498,6 @@ with tab5:
                     rank_arena, icona_arena, prox_arena = nome, icona, limite
                     break
             
-            # 4. SISTEMA LIVELLI - STUDIO (I Riassunti) - 11 Gradi
             gradi_riassunti = [
                 (3, "Matricola Smarrita", "🎒"), (10, "Evidenziatore Seriale", "🖍️"),
                 (20, "Divoratore di Dispense", "📄"), (35, "Macchina da Riassunti", "⚙️"),
@@ -524,10 +511,8 @@ with tab5:
                     rank_riassunti, icona_riassunti, prox_riassunti = nome, icona, limite
                     break
 
-            # --- RENDER DELL'INTERFACCIA ---
             st.divider()
             
-            # Mettiamo i due Rank affiancati per fare scena
             col_rank1, col_rank2 = st.columns(2)
             
             with col_rank1:
@@ -550,13 +535,11 @@ with tab5:
 
             st.divider()
             
-            # Le metriche in basso (ora sono 4)
             c1, c2, c3, c4 = st.columns(4)
             c1.metric(label="Punti Arena Totali", value=punti_totali, delta="Competitivo")
             c2.metric(label="Riassunti Generati", value=appunti_creati, delta="Secchione")
             c3.metric(label="Sfide Giocate", value=sfide_giocate)
             
-            # Calcoliamo il Win Rate (la percentuale di vittorie)
             winrate = int((vittorie / sfide_giocate) * 100) if sfide_giocate > 0 else 0
             c4.metric(label="Sfide Vinte 🏆", value=vittorie, delta=f"{winrate}% Win Rate")
 
