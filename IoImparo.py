@@ -59,7 +59,7 @@ if st.session_state.utente_loggato is None:
             try:
                 res = supabase.auth.sign_in_with_password({"email": email, "password": password})
                 st.session_state.utente_loggato = res.user
-                # AGGIUNGI QUESTE DUE RIGHE: Salviamo i Pass VIP in tasca
+                # Salviamo i Pass VIP in tasca
                 st.session_state.access_token = res.session.access_token
                 st.session_state.refresh_token = res.session.refresh_token
                 st.rerun()
@@ -91,7 +91,7 @@ with st.sidebar:
         st.session_state.utente_loggato = None
         st.rerun()
 
-# --- 6. FUNZIONE GENERATORE PDF (Tutta la tua formattazione originale) ---
+# --- 6. FUNZIONE GENERATORE PDF ---
 def genera_pdf_scaricabile(testo):
     buf = io.BytesIO()
     c = canvas.Canvas(buf, pagesize=letter)
@@ -147,26 +147,23 @@ with tab1:
             # --- DIFESA 1: CONTROLLO PESO FILE (Max 10 MB) ---
             if file_input.size > 10 * 1024 * 1024:
                 st.error("🚨 Alt! Il file è troppo grande. Massimo 10 MB consentiti.")
-                st.stop() # Ferma tutto il codice qui
+                st.stop()
             # -------------------------------------------------
 
             # --- DIFESA 2: RATE LIMITING (Anti-Spam API) ---
             if "ultimo_utilizzo" not in st.session_state:
                 st.session_state.ultimo_utilizzo = 0
             
-            # Se sono passati meno di 30 secondi dall'ultimo click...
             if time.time() - st.session_state.ultimo_utilizzo < 30:
                 st.warning("⏱️ Ehi, respira! I server si stanno raffreddando. Riprova tra 30 secondi.")
                 st.stop()
             
-            # Aggiorniamo il timer
             st.session_state.ultimo_utilizzo = time.time()
             # -------------------------------------------------
 
             with st.spinner("Lavorando..."):
-                # ... Qui sotto lasci il tuo blocco try/except intatto ...
                 try:
-                    contenuti = ["""Analizza questo materiale...
+                    contenuti = ["""Analizza questo materiale. 
                     1. TRASCRIZIONE: se immagine, trascrivi il testo. 
                     2. SCHEMA: crea uno schema a punti. 
                     3. RIASSUNTO: scrivi un riassunto chiaro."""]
@@ -183,24 +180,27 @@ with tab1:
                     response = client.models.generate_content(model='gemini-2.5-flash', contents=contenuti)
                     st.session_state.testo_pulito_studente = response.text
                     st.session_state.riassunto_pdf = genera_pdf_scaricabile(response.text)
+                    
                     # --- SALVATAGGIO IN CASSAFORTE (SUPABASE) ---
                     try:
-                        # Prepariamo i dati: chi è l'utente e qual è il testo
                         dati_da_salvare = {
                             "user_id": st.session_state.utente_loggato.id,
                             "testo_estratto": st.session_state.testo_pulito_studente
                         }
-                        # Li spariamo nel database appena creato
                         supabase.table("appunti_salvati").insert(dati_da_salvare).execute()
-                        # Un piccolo avviso per far capire all'utente che è tutto salvato
                         st.toast("💾 Appunti salvati nel tuo database segreto!", icon="✅")
                     except Exception as errore_db:
                         st.error(f"Errore nel salvataggio su Supabase: {errore_db}")
                     # ----------------------------------------------
+                    
                     st.markdown(response.text)
                     st.balloons()
                 except Exception as e:
-                    st.error(f"Errore: {e}")
+                    # GESTIONE ERRORE 503 GOOGLE API
+                    if "503" in str(e):
+                        st.warning("⏳ Il Professore AI è al momento sommerso di studenti (Server Google sovraccarichi). Riprova tra un paio di minuti!")
+                    else:
+                        st.error(f"Errore: {e}")
         
         if st.session_state.riassunto_pdf:
             st.download_button("📩 Scarica PDF", data=st.session_state.riassunto_pdf, file_name="riassunto.pdf", mime="application/pdf")
@@ -208,8 +208,14 @@ with tab1:
 with tab2:
     if st.session_state.testo_pulito_studente:
         if st.button("Genera Flashcard 🚀"):
-            res = client.models.generate_content(model='gemini-2.5-flash', contents=f"Crea 5 flashcard domanda/risposta da qui: {st.session_state.testo_pulito_studente}")
-            st.info(res.text)
+            try:
+                res = client.models.generate_content(model='gemini-2.5-flash', contents=f"Crea 5 flashcard domanda/risposta da qui: {st.session_state.testo_pulito_studente}")
+                st.info(res.text)
+            except Exception as e:
+                if "503" in str(e):
+                    st.warning("⏳ Server sovraccarichi. Riprova a generare le flashcard tra un istante!")
+                else:
+                    st.error(f"Errore: {e}")
     else:
         st.warning("Carica prima qualcosa in Fase 1!")
 
@@ -224,7 +230,6 @@ with tab3:
             st.chat_message("user").markdown(inp)
             st.session_state.messaggi_chat.append({"ruolo": "user", "contenuto": inp})
             
-            # --- IL NUOVO CERVELLO DEL PROFESSORE BLINDATO ---
             prompt_prof = f"""Sei un professore universitario rigoroso. 
 Devi interrogare lo studente basandoti ESCLUSIVAMENTE su questi appunti: 
 {st.session_state.testo_pulito_studente[:3000]}
@@ -235,10 +240,15 @@ REGOLE TASSATIVE:
 3. Se lo studente sta rispondendo a una tua domanda, PRIMA valuta la sua risposta dandogli un voto da 1 a 30 (trentesimi), correggi in una riga l'eventuale errore, e POI fai la domanda successiva.
 
 Storico Chat: {st.session_state.messaggi_chat}"""
-            # --------------------------------------------------
-
-            res = client.models.generate_content(model='gemini-2.5-flash', contents=prompt_prof)
-            with st.chat_message("assistant"): st.markdown(res.text)
-            st.session_state.messaggi_chat.append({"ruolo": "assistant", "contenuto": res.text})
+            
+            try:
+                res = client.models.generate_content(model='gemini-2.5-flash', contents=prompt_prof)
+                with st.chat_message("assistant"): st.markdown(res.text)
+                st.session_state.messaggi_chat.append({"ruolo": "assistant", "contenuto": res.text})
+            except Exception as e:
+                if "503" in str(e):
+                    st.warning("⏳ Il Professore sta bevendo un caffè (Server sovraccarichi). Clicca di nuovo invio tra poco!")
+                else:
+                    st.error(f"Errore: {e}")
     else:
         st.warning("Carica prima qualcosa in Fase 1!")
