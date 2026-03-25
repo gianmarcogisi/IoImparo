@@ -9,6 +9,8 @@ import io
 from supabase import create_client, Client
 import time
 from groq import Groq # <-- NUOVA LIBRERIA
+import random
+import json # Ci serve per gestire le domande del quiz
 
 # --- 1. CONFIGURAZIONE PAGINA ---
 NOME_APP = "IoImparo 🎓"
@@ -132,7 +134,13 @@ def genera_pdf_scaricabile(testo):
 st.title(f"🎓 Centrale Operativa {NOME_APP}")
 st.divider()
 
-tab1, tab2, tab3 = st.tabs(["🗺️ Fase 1: Elabora & PDF", "⚡ Fase 2: Flashcard", "🧑‍🏫 Fase 3: Esame"])
+# --- AGGIORNA LA RIGA DEI TABS ---
+tab1, tab2, tab3, tab4 = st.tabs([
+    "🗺️ Fase 1: Elabora & PDF", 
+    "⚡ Fase 2: Flashcard", 
+    "🧑‍🏫 Fase 3: Esame",
+    "🥊 Fase 4: Arena Farmacia"
+])
 
 with tab1:
     col1, col2 = st.columns([1, 2])
@@ -216,7 +224,82 @@ with tab3:
             st.chat_message("user").markdown(inp)
             st.session_state.messaggi_chat.append({"ruolo": "user", "contenuto": inp})
             
-            prompt_prof = f"""Sei un professore universitario rigoroso. 
+            
+with tab4:
+    st.subheader("🧪 Benvenuto nell'Arena di Farmacia")
+    st.write("Sfida un collega in tempo reale su un argomento specifico!")
+
+    scelta_arena = st.radio("Cosa vuoi fare?", ["Crea Sfida 🏗️", "Unisciti a Sfida ⚔️"], horizontal=True)
+
+    if scelta_arena == "Crea Sfida 🏗️":
+        materia = st.selectbox("Seleziona la materia:", [
+            "Chimica Farmaceutica", "Farmacologia", "Tecnologia Farmaceutica", 
+            "Biochimica", "Chimica Organica", "Farmacognosia", "Anatomia"
+        ])
+        
+        file_sfida = st.file_uploader("Carica il materiale della sfida", type=['pdf', 'jpg', 'png'], key="file_arena")
+        
+        if st.button("Genera Arena 🏟️") and file_sfida:
+            with st.spinner("L'IA sta preparando il ring..."):
+                # 1. Estraiamo il testo (usiamo Gemini per la vista)
+                contenuti = ["Estrai tutto il testo per una sfida tra studenti:"]
+                if file_sfida.type == "application/pdf":
+                    reader = PyPDF2.PdfReader(file_sfida)
+                    testo_arena = "".join([page.extract_text() for page in reader.pages])
+                else:
+                    testo_arena = Image.open(file_sfida)
+                
+                # 2. Generiamo le domande in formato JSON (per essere leggibili dal codice)
+                prompt_quiz = f"""Genera 3 domande a risposta multipla su questo testo di {materia}.
+                Rispondi SOLO con un formato JSON così:
+                [
+                  {{"domanda": "...", "opzioni": ["A", "B", "C"], "corretta": "A"}},
+                  ...
+                ]
+                Testo: {testo_arena[:2000]}"""
+                
+                quiz_raw = genera_testo_con_fallback(prompt_quiz)
+                
+                # Pulizia del testo se l'IA aggiunge chiacchiere (succede con Llama)
+                quiz_pulito = quiz_raw.strip().replace("```json", "").replace("```", "")
+                
+                # 3. Creiamo il PIN e salviamo su Supabase
+                nuovo_pin = str(random.randint(1000, 9999))
+                try:
+                    supabase.table("sfide_multiplayer").insert({
+                        "pin": nuovo_pin,
+                        "materia": materia,
+                        "host_id": st.session_state.utente_loggato.id,
+                        "appunti_testo": str(testo_arena)[:3000],
+                        "domande_json": json.loads(quiz_pulito),
+                        "stato": "waiting"
+                    }).execute()
+                    st.success(f"🔥 Arena Creata! Dai questo PIN al tuo collega: **{nuovo_pin}**")
+                    st.info("Resta in questa pagina, l'app si aggiornerà quando il tuo avversario entrerà.")
+                except Exception as e:
+                    st.error(f"Errore creazione arena: {e}")
+
+    else: # --- UNISCITI A SFIDA ---
+        pin_inserito = st.text_input("Inserisci il PIN di 4 cifre:")
+        if st.button("Entra nel Ring 🥊"):
+            try:
+                # Cerchiamo la sfida
+                sfida = supabase.table("sfide_multiplayer").select("*").eq("pin", pin_inserito).eq("stato", "waiting").execute()
+                
+                if sfida.data:
+                    id_sfida = sfida.data[0]['id']
+                    # Ci registriamo come Guest e cambiamo stato
+                    supabase.table("sfide_multiplayer").update({
+                        "guest_id": st.session_state.utente_loggato.id,
+                        "stato": "playing"
+                    }).eq("id", id_sfida).execute()
+                    st.success("✅ Sei dentro! Preparati alla prima domanda...")
+                    st.rerun()
+                else:
+                    st.error("PIN non trovato o sfida già iniziata.")
+            except Exception as e:
+                st.error(f"Errore: {e}")
+                prompt_prof = f"""Sei un professore universitario rigoroso. 
 Devi interrogare lo studente basandoti ESCLUSIVAMENTE su questi appunti: 
 {st.session_state.testo_pulito_studente[:3000]}
 
