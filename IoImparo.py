@@ -152,30 +152,33 @@ with tab1:
         # 1. ABILITIAMO IL MULTIPLO SOLO PER LE FOTO
         is_foto = (tipo_file == "📸 Foto")
         file_input = st.file_uploader(
-            "Scegli file (Max 50 foto)" if is_foto else "Scegli file (Max 1 PDF)", 
+            "Scegli file (Max 150 foto)" if is_foto else "Scegli file (Max 1 PDF)", 
             type=['png', 'jpg', 'jpeg'] if is_foto else ['pdf'], 
-            accept_multiple_files=is_foto, # <-- LA MAGIA È QUI
+            accept_multiple_files=is_foto, 
             key="file_up"
         )
-        bottone_elabora = st.button("Spremi Appunti 🪄", type="primary", use_container_width=True)
+        
+        # 2. CONTROLLO IMMEDIATO E BLOCCO BOTTONE (Limite alzato a 150)
+        troppe_foto = False
+        if is_foto and isinstance(file_input, list) and len(file_input) > 150:
+            st.error(f"🚨 Hai inserito {len(file_input)} foto! Rimuovine {len(file_input) - 150} per continuare.")
+            troppe_foto = True
+            
+        bottone_elabora = st.button("Spremi Appunti 🪄", type="primary", use_container_width=True, disabled=troppe_foto)
 
     with col2:
         st.subheader("📄 Risultato")
         
-        # 2. GESTIONE DELLA LISTA DI FOTO O DEL SINGOLO PDF
+        # 3. GESTIONE DELLA LISTA DI FOTO O DEL SINGOLO PDF
         file_valido = len(file_input) > 0 if is_foto and file_input is not None else file_input is not None
         
         if bottone_elabora and file_valido:
             # --- CONTROLLO LIMITI DI SICUREZZA ---
             if is_foto:
-                if len(file_input) > 50:
-                    st.error("🚨 Troppe foto! Puoi caricare massimo 50 immagini alla volta.")
-                    st.stop()
-                
-                # Calcoliamo il peso di tutte le foto sommate
+                # Calcoliamo il peso di tutte le foto sommate (Alzato a 150 MB)
                 dimensione_totale = sum([f.size for f in file_input])
-                if dimensione_totale > 50 * 1024 * 1024: # Alzato a 50 MB per supportare 50 foto
-                    st.error("🚨 Le foto pesano troppo in totale. Max 50 MB.")
+                if dimensione_totale > 150 * 1024 * 1024: 
+                    st.error("🚨 Le foto pesano troppo in totale. Max 150 MB.")
                     st.stop()
             else:
                 if file_input.size > 15 * 1024 * 1024: # 15 MB per i PDF
@@ -189,7 +192,7 @@ with tab1:
                 st.stop()
             st.session_state.ultimo_utilizzo = time.time()
 
-            with st.spinner("Lavorando con Gemini Vision (potrebbe volerci un po' per tante foto)..."):
+            with st.spinner("Lavorando con Gemini Vision (sto leggendo un sacco di dati, abbi pazienza)..."):
                 try:
                     contenuti = ["""Agisci come il miglior assistente universitario del mondo. Analizza il materiale fornito e scrivi un documento diviso ESATTAMENTE in queste 3 sezioni ben visibili:
 --- SEZIONE 1: TRASCRIZIONE ---
@@ -199,7 +202,7 @@ with tab1:
 --- SEZIONE 3: RIASSUNTO COMPLETO ---
 (Scrivi un riassunto discorsivo, chiaro e approfondito per studiare)."""]
                     
-                    # 3. CICLO PER CARICARE TUTTE LE FOTO IN GEMINI
+                    # 4. CICLO PER CARICARE TUTTE LE FOTO IN GEMINI
                     if is_foto:
                         for foto in file_input:
                             contenuti.append(Image.open(foto))
