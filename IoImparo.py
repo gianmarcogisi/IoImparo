@@ -45,6 +45,9 @@ if "access_token" in st.session_state:
 # --- IL CENTRALINO MULTI-MODELLO ---
 def genera_testo_con_fallback(prompt):
     try:
+# Facciamo respirare il server per 2 secondi prima di inviare
+        time.sleep(2) 
+        response = client.models.generate_content(model='gemini-2.5-flash', contents=contenuti)
         response = client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
         return response.text
     except Exception as e:
@@ -52,7 +55,7 @@ def genera_testo_con_fallback(prompt):
             st.toast("Google intasato. Attivo Llama 3... 🚀", icon="🦙")
             chat_completion = groq_client.chat.completions.create(
                 messages=[{"role": "user", "content": prompt}],
-                model="llama3-8b-8192",
+                llama-3.3-70b-versatile",
             )
             return chat_completion.choices[0].message.content
         else:
