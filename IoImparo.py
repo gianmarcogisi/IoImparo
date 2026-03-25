@@ -15,6 +15,15 @@ import json
 # --- 1. CONFIGURAZIONE PAGINA ---
 NOME_APP = "IoImparo 🎓"
 st.set_page_config(page_title=NOME_APP, page_icon="🎓", layout="wide")
+# --- NASCONDIAMO IL BRAND STREAMLIT ---
+hide_st_style = """
+            <style>
+            #MainMenu {visibility: hidden;}
+            footer {visibility: hidden;}
+            header {visibility: hidden;}
+            </style>
+            """
+st.markdown(hide_st_style, unsafe_allow_html=True)
 
 # --- 2. SICUREZZA E CHIAVI ---
 api_key = st.secrets["GEMINI_API_KEY"]
