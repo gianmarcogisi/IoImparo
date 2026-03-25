@@ -7,6 +7,58 @@ from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import letter
 import io
 from supabase import create_client, Client
+import streamlit as st
+
+# --- 1. GESTIONE DELLO STATO (Memoria) ---
+# Inizializziamo la variabile per ricordare se l'utente è loggato
+if 'utente_loggato' not in st.session_state:
+    st.session_state['utente_loggato'] = False
+
+# --- 2. SCHERMATA DI LOGIN / REGISTRAZIONE (Main Page) ---
+if not st.session_state['utente_loggato']:
+    
+    st.title("🎓 IoImparo")
+    st.markdown("Benvenuto! Trasforma le foto dei quaderni in PDF, genera flashcard e sfida il Professore AI.")
+    
+    # Creiamo due schede centrali, molto più eleganti del menù laterale
+    tab_login, tab_registrati = st.tabs(["🔑 Accedi", "📝 Registrati"])
+    
+    with tab_login:
+        st.subheader("Bentornato!")
+        email = st.text_input("Email", key="login_email")
+        password = st.text_input("Password", type="password", key="login_password")
+        
+        if st.button("Entra 🚀", use_container_width=True):
+            # QUI INSERIRAI LA TUA LOGICA DI CONTROLLO (es. Supabase)
+            # Per ora simuliamo che il login vada a buon fine:
+            st.session_state['utente_loggato'] = True
+            st.rerun() # Ricarica la pagina per far sparire il login
+            
+    with tab_registrati:
+        st.subheader("Crea un nuovo account")
+        nuova_email = st.text_input("Email", key="reg_email")
+        nuova_password = st.text_input("Password", type="password", key="reg_password")
+        conferma_password = st.text_input("Conferma Password", type="password")
+        
+        if st.button("Registrati Gratis ✨", use_container_width=True):
+            # QUI INSERIRAI LA LOGICA DI REGISTRAZIONE
+            st.success("Account creato! Ora puoi fare il login.")
+
+# --- 3. L'APP VERA E PROPRIA (Visibile solo se loggato) ---
+else:
+    # Mettiamo il bottone di Logout nella barra laterale (qui ha senso!)
+    with st.sidebar:
+        st.write("👤 Profilo Utente")
+        if st.button("Esci (Logout)"):
+            st.session_state['utente_loggato'] = False
+            st.rerun()
+
+    # Da qui in poi, metti tutto il codice della tua app: uploader, flashcard, IA...
+    st.title("🎓 Area Studio di IoImparo")
+    st.success("Accesso effettuato! Benvenuto nel tuo laboratorio di studio.")
+    
+    file_caricato = st.file_uploader("Trascina qui i tuoi appunti", type=['pdf', 'png', 'jpg'])
+    # ... resto del codice ...
 
 # --- 1. CONFIGURAZIONE PAGINA (Deve essere la prima istruzione Streamlit) ---
 NOME_APP = "IoImparo 🎓"
