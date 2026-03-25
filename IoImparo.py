@@ -7,60 +7,6 @@ from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import letter
 import io
 from supabase import create_client, Client
-import streamlit as st
-
-# --- 1. GESTIONE DELLO STATO (Memoria) ---
-# Inizializziamo la variabile per ricordare se l'utente è loggato
-if 'utente_loggato' not in st.session_state:
-    st.session_state['utente_loggato'] = False
-
-# --- 2. SCHERMATA DI LOGIN / REGISTRAZIONE (Main Page) ---
-if not st.session_state['utente_loggato']:
-    
-    st.title("🎓 IoImparo")
-    st.markdown("Benvenuto! Trasforma le foto dei quaderni in PDF, genera flashcard e sfida il Professore AI.")
-    
-    # Creiamo due schede centrali, molto più eleganti del menù laterale
-    tab_login, tab_registrati = st.tabs(["🔑 Accedi", "📝 Registrati"])
-    
-    with tab_login:
-        st.subheader("Bentornato!")
-        email = st.text_input("Email", key="login_email")
-        password = st.text_input("Password", type="password", key="login_password")
-        
-        if st.button("Entra 🚀", use_container_width=True):
-            # ... la tua logica di supabase ...
-            
-            # Quando il login ha successo, salviamo DUE cose:
-            st.session_state['utente_loggato'] = True
-            st.session_state['email_utente'] = email # <-- Salviamo l'email separatamente!
-            st.rerun()
-            
-    with tab_registrati:
-        st.subheader("Crea un nuovo account")
-        nuova_email = st.text_input("Email", key="reg_email")
-        nuova_password = st.text_input("Password", type="password", key="reg_password")
-        conferma_password = st.text_input("Conferma Password", type="password")
-        
-        if st.button("Registrati Gratis ✨", use_container_width=True):
-            # QUI INSERIRAI LA LOGICA DI REGISTRAZIONE
-            st.success("Account creato! Ora puoi fare il login.")
-
-# --- 3. L'APP VERA E PROPRIA (Visibile solo se loggato) ---
-else:
-    # Mettiamo il bottone di Logout nella barra laterale (qui ha senso!)
-    with st.sidebar:
-        st.write("👤 Profilo Utente")
-        if st.button("Esci (Logout)"):
-            st.session_state['utente_loggato'] = False
-            st.rerun()
-
-    # Da qui in poi, metti tutto il codice della tua app: uploader, flashcard, IA...
-    st.title("🎓 Area Studio di IoImparo")
-    st.success("Accesso effettuato! Benvenuto nel tuo laboratorio di studio.")
-    
-    file_caricato = st.file_uploader("Trascina qui i tuoi appunti", type=['pdf', 'png', 'jpg'])
-    # ... resto del codice ...
 
 # --- 1. CONFIGURAZIONE PAGINA (Deve essere la prima istruzione Streamlit) ---
 NOME_APP = "IoImparo 🎓"
@@ -86,48 +32,54 @@ if "riassunto_pdf" not in st.session_state:
 if "messaggi_chat" not in st.session_state:
     st.session_state.messaggi_chat = []
 
-# --- 4. SIDEBAR: LOGIN E REGISTRAZIONE ---
+# --- 4. IL MURO DI PROTEZIONE & LOGIN CENTRALE ---
+if st.session_state.utente_loggato is None:
+    st.title(f"🎓 {NOME_APP}")
+    st.warning("👋 Benvenuto! Per iniziare a studiare, accedi o registrati qui sotto.")
+    st.info("Con IoImparo puoi trasformare foto dei quaderni in PDF, generare flashcard e sfidare il Professore AI.")
+    
+    # Le due schede centrali per il mobile
+    tab_login, tab_registrati = st.tabs(["🔑 Accedi", "📝 Registrati"])
+    
+    with tab_login:
+        st.subheader("Bentornato nell'Arena!")
+        email = st.text_input("Email", key="login_email")
+        password = st.text_input("Password", type="password", key="login_password")
+        
+        if st.button("Entra nell'Arena 🔑", use_container_width=True):
+            try:
+                res = supabase.auth.sign_in_with_password({"email": email, "password": password})
+                st.session_state.utente_loggato = res.user
+                st.rerun()
+            except Exception as e:
+                st.error("Credenziali errate.")
+                
+    with tab_registrati:
+        st.subheader("Crea un nuovo account")
+        nuova_email = st.text_input("Email", key="reg_email")
+        nuova_password = st.text_input("Password", type="password", key="reg_password")
+        
+        if st.button("Crea Account 🚀", use_container_width=True):
+            try:
+                res = supabase.auth.sign_up({"email": nuova_email, "password": nuova_password})
+                st.success("Account creato! Ora puoi fare il login (se hai lasciato attiva la conferma email, controlla la posta).")
+            except Exception as e:
+                st.error(f"Errore: {e}")
+
+    # ST.STOP() È FONDAMENTALE QUI: impedisce di caricare il resto del sito se non sei loggato
+    st.stop() 
+
+# --- 5. SIDEBAR: PROFILO UTENTE (Visibile solo se loggato) ---
 with st.sidebar:
     st.image("https://img.icons8.com/fluent/100/000000/graduation-cap.png", width=100)
     st.title("Area Riservata")
+    st.write(f"Socio: **{st.session_state.utente_loggato.email}**")
     
-    if st.session_state.utente_loggato is None:
-        scelta_auth = st.radio("Cosa vuoi fare?", ["Accedi", "Registrati"])
-        email = st.text_input("Email")
-        password = st.text_input("Password", type="password")
-        
-        if scelta_auth == "Registrati":
-            if st.button("Crea Account 🚀", use_container_width=True):
-                try:
-                    res = supabase.auth.sign_up({"email": email, "password": password})
-                    st.success("Account creato! Se hai lasciato attiva la conferma email, controlla la posta.")
-                except Exception as e:
-                    st.error(f"Errore: {e}")
-        else:
-            if st.button("Entra nell'Arena 🔑", use_container_width=True):
-                try:
-                    res = supabase.auth.sign_in_with_password({"email": email, "password": password})
-                    st.session_state.utente_loggato = res.user
-                    st.rerun()
-                except Exception as e:
-                    st.error("Credenziali errate.")
-    # --- 3. L'APP VERA E PROPRIA ---
-else: # <-- Solo se è loggato!
-    
-    # Ora possiamo stampare tranquillamente l'email usando la nuova variabile
-    st.write(f"Socio: **{st.session_state['email_utente']}**")
-    
-    st.title("🎓 Area Studio di IoImparo")
-    # ... resto del sito ...
+    if st.button("Esci (Logout)"):
+        st.session_state.utente_loggato = None
+        st.rerun()
 
-# --- 5. IL MURO DI PROTEZIONE ---
-if st.session_state.utente_loggato is None:
-    st.title(f"🎓 {NOME_APP}")
-    st.warning("👋 Benvenuto! Per iniziare a studiare, accedi o registrati dalla barra laterale.")
-    st.info("Con IoImparo puoi trasformare foto dei quaderni in PDF, generare flashcard e sfidare il Professore AI.")
-    st.stop() 
-
-# --- 6. FUNZIONE GENERATORE PDF ---
+# --- 6. FUNZIONE GENERATORE PDF (Tutta la tua formattazione originale) ---
 def genera_pdf_scaricabile(testo):
     buf = io.BytesIO()
     c = canvas.Canvas(buf, pagesize=letter)
