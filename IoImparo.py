@@ -172,13 +172,14 @@ def genera_pdf_scaricabile(testo):
     return buf
 
 # TABS COMPLETI
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
     "🗺️ Fase 1: Elabora & PDF", 
     "⚡ Fase 2: Flashcard", 
     "🧑‍🏫 Fase 3: Esame",
     "🥊 Fase 4: Arena Farmacia",
     "🏆 Fase 5: Profilo Ranked",
-    "🌍 Fase 6: Community"
+    "🌍 Fase 6: Community",
+    "🗂️ Fase 7: Archivio Privato"
 ])
 
 with tab1:
@@ -273,20 +274,22 @@ with tab1:
                         if is_public: st.toast("🌍 Salvato e condiviso con la Community!", icon="✅")
                         else: st.toast("🔒 Salvato nel tuo archivio privato!", icon="✅")
                         
+                        # --- NUOVO SISTEMA DI RIMOZIONE CRONOLOGICA (> 25) ---
                         MAX_APPUNTI_MEMORIA = 25 
-                        res_storico = supabase.table("appunti_salvati").select("id, created_at, testo_estratto").eq("user_id", st.session_state.utente_loggato.id).order("created_at").execute()
+                        # Prendiamo solo i tuoi appunti PRIVATI, dal più vecchio al più nuovo
+                        res_storico = supabase.table("appunti_salvati").select("id").eq("user_id", st.session_state.utente_loggato.id).eq("is_public", False).order("created_at").execute()
                         
                         if len(res_storico.data) > MAX_APPUNTI_MEMORIA:
-                            appunti_da_svuotare = len(res_storico.data) - MAX_APPUNTI_MEMORIA
-                            appunti_vecchi = [x for x in res_storico.data if x['testo_estratto'] != "🗄️ [Contenuto archiviato automaticamente per liberare spazio nel database]"]
+                            # Calcoliamo quanti file sono in eccesso
+                            appunti_da_eliminare = len(res_storico.data) - MAX_APPUNTI_MEMORIA
+                            # Prendiamo gli ID dei primissimi (i più vecchi)
+                            ids_da_eliminare = [record['id'] for record in res_storico.data[:appunti_da_eliminare]]
                             
-                            if len(appunti_vecchi) > 0:
-                                ids_da_archiviare = [record['id'] for record in appunti_vecchi[:appunti_da_svuotare]]
-                                for old_id in ids_da_archiviare:
-                                    supabase.table("appunti_salvati").update({
-                                        "testo_estratto": "🗄️ [Contenuto archiviato automaticamente per liberare spazio nel database]"
-                                    }).eq("id", old_id).execute()
-                                st.toast(f"🧹 Spazio ottimizzato: {len(ids_da_archiviare)} appunti vecchi archiviati!", icon="♻️")
+                            # Li cancelliamo fisicamente dal database
+                            for old_id in ids_da_eliminare:
+                                supabase.table("appunti_salvati").delete().eq("id", old_id).execute()
+                            
+                            st.toast(f"🧹 Spazio ottimizzato: {len(ids_da_eliminare)} appunti vecchi eliminati per fare spazio!", icon="♻️")
                                 
                     except Exception as e: 
                         st.error(f"Errore DB: {e}")
@@ -711,3 +714,33 @@ with tab6:
                                 st.warning("Inserisci l'email!")
         else:
             st.info("Nessun risultato trovato. Sii il primo a pubblicare!")
+# --- FASE 7: ARCHIVIO PRIVATO ---
+with tab7:
+    st.subheader("🗂️ Il tuo Archivio Privato")
+    st.write("Qui trovi i tuoi ultimi 25 appunti privati. Caricando il 26°, il più vecchio verrà eliminato automaticamente.")
+    
+    # Li peschiamo ordinandoli dal più NUOVO al più VECCHIO (desc=True)
+    miei_archiviati = supabase.table("appunti_salvati").select("*").eq("user_id", st.session_state.utente_loggato.id).eq("is_public", False).order("created_at", desc=True).execute()
+    
+    if miei_archiviati.data:
+        st.write(f"Hai **{len(miei_archiviati.data)}/25** appunti privati salvati.")
+        
+        for ap in miei_archiviati.data:
+            data_formattata = ap['created_at'][:10] # Prende solo la data YYYY-MM-DD
+            with st.expander(f"📄 {ap['titolo']} | 🧬 {ap['materia']} (Creato il: {data_formattata})"):
+                st.write(ap['testo_estratto'][:500] + "... [Continua nel PDF]")
+                
+                st.divider()
+                
+                # Bottone per scaricare al volo il PDF
+                pdf_bytes = genera_pdf_scaricabile(ap['testo_estratto'])
+                st.download_button(
+                    label="📩 Scarica PDF Completo", 
+                    data=pdf_bytes, 
+                    file_name=f"{ap['titolo'].replace(' ', '_')}.pdf", 
+                    mime="application/pdf", 
+                    key=f"dl_privato_{ap['id']}"
+                )
+    else:
+        st.info("Il tuo archivio privato è ancora vuoto. Elabora un PDF nella Fase 1 e salvalo come Privato!")
+
