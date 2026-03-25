@@ -22,6 +22,14 @@ supabase_key = st.secrets["SUPABASE_KEY"]
 supabase: Client = create_client(supabase_url, supabase_key)
 client = genai.Client(api_key=api_key)
 
+# --- NUOVO: MOSTRA IL PASS VIP AL DATABASE ---
+if "access_token" in st.session_state:
+    try:
+        supabase.auth.set_session(st.session_state.access_token, st.session_state.refresh_token)
+    except Exception:
+        pass # Se il pass è scaduto, lo ignora
+# ---------------------------------------------
+
 # --- 3. GESTIONE SESSIONE UTENTE ---
 if "utente_loggato" not in st.session_state:
     st.session_state.utente_loggato = None
