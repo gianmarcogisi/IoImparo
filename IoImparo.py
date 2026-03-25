@@ -317,5 +317,5 @@ Storico Chat: {st.session_state.messaggi_chat}"""
                 st.session_state.messaggi_chat.append({"ruolo": "assistant", "contenuto": risposta_prof})
             except Exception as e:
                 st.error(f"Errore Chat: {e}")
-    else:
-        st.warning("Carica prima qualcosa in Fase 1!")
+            else:
+                st.warning("Carica prima qualcosa in Fase 1!")
