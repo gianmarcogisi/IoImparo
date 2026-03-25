@@ -50,6 +50,9 @@ if st.session_state.utente_loggato is None:
             try:
                 res = supabase.auth.sign_in_with_password({"email": email, "password": password})
                 st.session_state.utente_loggato = res.user
+                # AGGIUNGI QUESTE DUE RIGHE: Salviamo i Pass VIP in tasca
+                st.session_state.access_token = res.session.access_token
+                st.session_state.refresh_token = res.session.refresh_token
                 st.rerun()
             except Exception as e:
                 st.error("Credenziali errate.")
