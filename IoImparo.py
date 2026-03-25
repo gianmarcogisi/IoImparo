@@ -8,9 +8,11 @@ from reportlab.lib.pagesizes import letter
 import io
 from supabase import create_client, Client
 import time
-from groq import Groq
 import random
 import json
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 
 # --- 1. CONFIGURAZIONE PAGINA ---
 NOME_APP = "IoImparo 🎓"
@@ -30,11 +32,9 @@ st.markdown(hide_st_style, unsafe_allow_html=True)
 api_key = st.secrets["GEMINI_API_KEY"]
 supabase_url = st.secrets["SUPABASE_URL"]
 supabase_key = st.secrets["SUPABASE_KEY"]
-groq_api_key = st.secrets["GROQ_API_KEY"]
 
 supabase: Client = create_client(supabase_url, supabase_key)
 client = genai.Client(api_key=api_key)
-groq_client = Groq(api_key=groq_api_key)
 
 if "access_token" in st.session_state:
     try:
@@ -42,9 +42,7 @@ if "access_token" in st.session_state:
     except Exception:
         pass 
 
-# --- I NUOVI MOTORI INTELLIGENTI ---
-
-# Motore 1: Gemini (Per lavori pesanti: Flashcard, JSON, Arena)
+# --- I NUOVI MOTORI INTELLIGENTI (100% GEMINI) ---
 def genera_testo_gemini(prompt):
     max_tentativi = 3
     attesa = 2
@@ -61,28 +59,43 @@ def genera_testo_gemini(prompt):
             else:
                 raise e
 
-# Motore 2: Chat del Professore (Tutto su Gemini!)
 def chat_professore_gemini(system_prompt, messaggi_chat):
     try:
-        # Costruiamo il copione esatto per Gemini
         prompt_completo = system_prompt + "\n\n--- CRONOLOGIA CHAT ---\n"
-        
-        # Aggiungiamo lo storico in modo che Gemini capisca chi parla
         for msg in messaggi_chat:
             ruolo = "Professore" if msg["ruolo"] == "assistant" else "Studente"
             prompt_completo += f"{ruolo}: {msg['contenuto']}\n"
             
-        # Diamo la parola al prof
         prompt_completo += "Professore: "
-
-        # Usiamo il velocissimo Flash 2.5
-        response = client.models.generate_content(
-            model='gemini-2.5-flash', 
-            contents=prompt_completo
-        )
+        response = client.models.generate_content(model='gemini-2.5-flash', contents=prompt_completo)
         return response.text
     except Exception as e:
         raise e
+
+def invia_email_appunti(destinatario, titolo, materia, contenuto):
+    try:
+        mittente = st.secrets.get("EMAIL_SENDER", "")
+        password = st.secrets.get("EMAIL_PASSWORD", "")
+        if not mittente or not password:
+            raise Exception("Credenziali email non configurate")
+            
+        msg = MIMEMultipart()
+        msg['From'] = mittente
+        msg['To'] = destinatario
+        msg['Subject'] = f"🎓 IoImparo - Appunti di {materia}: {titolo}"
+        
+        corpo_email = f"Ciao!\n\nEcco gli appunti di {materia} che hai richiesto dalla Community di IoImparo.\n\nTitolo: {titolo}\n\n---\n\n{contenuto}\n\n---\nBuono studio!"
+        msg.attach(MIMEText(corpo_email, 'plain', 'utf-8'))
+        
+        server = smtplib.SMTP('smtp.gmail.com', 587)
+        server.starttls()
+        server.login(mittente, password)
+        server.send_message(msg)
+        server.quit()
+        return True
+    except Exception as e:
+        print(f"Errore invio email: {e}")
+        return False
 
 # --- 3. GESTIONE SESSIONE UTENTE ---
 if "utente_loggato" not in st.session_state: st.session_state.utente_loggato = None
@@ -117,7 +130,7 @@ if st.session_state.utente_loggato is None:
             except Exception as e: st.error(f"Errore: {e}")
     st.stop() 
 
-# --- 5 & 7. INTERFACCIA PRINCIPALE & MENU A TENDINA ---
+# --- 5. INTERFACCIA PRINCIPALE & MENU A TENDINA ---
 col_titolo, col_profilo = st.columns([4, 1])
 
 with col_titolo:
@@ -158,13 +171,14 @@ def genera_pdf_scaricabile(testo):
     buf.seek(0)
     return buf
 
-# NUOVO TABS
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
+# TABS COMPLETI
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "🗺️ Fase 1: Elabora & PDF", 
     "⚡ Fase 2: Flashcard", 
     "🧑‍🏫 Fase 3: Esame",
     "🥊 Fase 4: Arena Farmacia",
-    "🏆 Fase 5: Profilo Ranked"
+    "🏆 Fase 5: Profilo Ranked",
+    "🌍 Fase 6: Community"
 ])
 
 with tab1:
@@ -186,6 +200,20 @@ with tab1:
             st.error(f"🚨 Hai inserito {len(file_input)} foto! Rimuovine {len(file_input) - 150} per continuare.")
             troppe_foto = True
             
+        st.divider()
+        st.subheader("💾 Opzioni di Salvataggio")
+        visibilita = st.radio("Visibilità Appunti:", ["🔒 Privato (Solo per me)", "🌍 Pubblico (Condividi nella Community)"], horizontal=True)
+        is_public = (visibilita == "🌍 Pubblico (Condividi nella Community)")
+        
+        titolo_appunto = "Appunti Senza Titolo"
+        materia_appunto = "Generica"
+        if is_public:
+            titolo_appunto = st.text_input("Dai un titolo (es. Enzimi):")
+            materia_appunto = st.text_input("Materia (es. Biochimica):")
+            if not titolo_appunto or not materia_appunto:
+                st.warning("⚠️ Inserisci Titolo e Materia per poter pubblicare.")
+                troppe_foto = True 
+
         bottone_elabora = st.button("Spremi Appunti 🪄", type="primary", use_container_width=True, disabled=troppe_foto)
 
     with col2:
@@ -236,9 +264,14 @@ with tab1:
                     try:
                         supabase.table("appunti_salvati").insert({
                             "user_id": st.session_state.utente_loggato.id,
-                            "testo_estratto": st.session_state.testo_pulito_studente
+                            "testo_estratto": st.session_state.testo_pulito_studente,
+                            "is_public": is_public,
+                            "titolo": titolo_appunto if is_public else "Appunto Privato",
+                            "materia": materia_appunto if is_public else "Generica"
                         }).execute()
-                        st.toast("💾 Salvato nel database!", icon="✅")
+                        
+                        if is_public: st.toast("🌍 Salvato e condiviso con la Community!", icon="✅")
+                        else: st.toast("🔒 Salvato nel tuo archivio privato!", icon="✅")
                         
                         MAX_APPUNTI_MEMORIA = 25 
                         res_storico = supabase.table("appunti_salvati").select("id, created_at, testo_estratto").eq("user_id", st.session_state.utente_loggato.id).order("created_at").execute()
@@ -270,16 +303,12 @@ with tab1:
 with tab2:
     if st.session_state.testo_pulito_studente:
         if st.button("Genera Flashcard 🚀"):
-            # --- ECCO LO SPINNER SIMPATICO ---
             with st.spinner("🧠 Sto frullando gli appunti per creare le tue Flashcard magiche... Scalda il cervello!"):
                 try:
-                    # ORA USA GEMINI, MOLTO PIÙ ADATTO AI TESTI LUNGHI
                     testo_flashcard = genera_testo_gemini(f"Crea 5 flashcard domanda/risposta da qui: {st.session_state.testo_pulito_studente}")
                     st.info(testo_flashcard)
-                except Exception as e: 
-                    st.error(f"Errore generazione: {e}")
-    else: 
-        st.warning("Carica prima qualcosa in Fase 1!")
+                except Exception as e: st.error(f"Errore generazione: {e}")
+    else: st.warning("Carica prima qualcosa in Fase 1!")
 
 with tab3:
     if st.session_state.testo_pulito_studente:
@@ -292,39 +321,33 @@ with tab3:
             st.chat_message("user").markdown(inp)
             st.session_state.messaggi_chat.append({"ruolo": "user", "contenuto": inp})
             
-            prompt_prof = f"""Sei un professore universitario di materie scientifiche (Farmacia/Medicina) geniale, incredibilmente sarcastico e dalla battuta pronta. Sei un po' come il Dr. House: pungente e ironico, ma sotto sotto ci tieni che i tuoi studenti imparino.
-Devi interrogare lo studente basandoti ESCLUSIVAMENTE su questi appunti: 
+            system_prompt = f"""Sei il Prof. Dr. House, docente universitario di Farmacia/Medicina. Sei geniale, cinico, incredibilmente sarcastico e non sopporti l'ignoranza. Sotto sotto vuoi che gli studenti imparino, ma li tratti con affettuoso disprezzo.
+Devi interrogare lo studente basandoti ESCLUSIVAMENTE su questi appunti:
 {st.session_state.testo_pulito_studente[:3000]}
 
-REGOLE TASSATIVE:
-1. Fai UNA SOLA domanda alla volta. Sii sintetico ma aggiungi sempre una piccola nota sarcastica o una battuta tagliente.
-2. Se lo studente dà una risposta senza senso (es. 'asd', '123') o spara una cavalleria galattica, distruggilo con sarcasmo spietato, dagli un voto bassissimo (es. 1/30) e prendilo bonariamente in giro per la sua ignoranza.
-3. Se la risposta è sbagliata o incompleta, PRIMA valuta da 1 a 30 con un commento ironico, POI correggilo usando la "Lavagna Visiva".
-4. Se la risposta è corretta, fagli un complimento, ma sempre mantenendo il tuo ego smisurato (es. "Bravo, quasi ai miei livelli...").
-5. LAVAGNA VISIVA: Quando correggi, USA OBBLIGATORIAMENTE il linguaggio Markdown per creare Tabelle riassuntive o schemi visivi (ASCII art o elenchi).
-6. Dopo la spiegazione, fai subito la domanda successiva.
-
-Storico Chat: {st.session_state.messaggi_chat}"""
+REGOLE TASSATIVE (Se le violi, sei licenziato):
+1. Fai UNA SOLA DOMANDA alla volta e aspetta la risposta.
+2. Quando lo studente risponde:
+   - Valuta la sua risposta sfoggiando tutto il tuo sarcasmo.
+   - Dagli un voto in trentesimi (es. 28/30 se è bravo, 1/30 se dice fesserie).
+   - Correggi i suoi errori usando SEMPRE la "Lavagna Visiva" (Usa il Markdown per disegnare una Tabella, uno schema ad albero o un elenco puntato).
+3. Finita la correzione, fagli SUBITO una nuova domanda sul testo."""
             
             try:
-                # --- LO SPINNER DEL PROFESSORE ---
                 with st.spinner("🧑‍🏫 Il Prof sta affilando il sarcasmo e valutando la tua risposta... Trema!"):
-                    # ORA USA SOLO GEMINI! Gli passiamo il copione e lo storico della chat
                     risposta_prof = chat_professore_gemini(system_prompt, st.session_state.messaggi_chat)
                 
                 with st.chat_message("assistant"): 
                     st.markdown(risposta_prof)
                 st.session_state.messaggi_chat.append({"ruolo": "assistant", "contenuto": risposta_prof})
                 
-            except Exception as e: 
-                st.error(f"Errore Chat: {e}")
+            except Exception as e: st.error(f"Errore Chat: {e}")
+    else: st.warning("Carica prima qualcosa in Fase 1!")
 
 with tab4:
     st.subheader("🧪 Arena di Farmacia")
 
-    # --- 1. SISTEMA DI RICONNESSIONE AUTOMATICA ---
     if "id_sfida_attiva" not in st.session_state:
-        # Controlliamo se l'utente ha già una sfida in corso nel DB (da Host o da Guest)
         uid = st.session_state.utente_loggato.id
         res_host = supabase.table("sfide_multiplayer").select("id").eq("host_id", uid).in_("stato", ["waiting", "playing"]).execute()
         res_guest = supabase.table("sfide_multiplayer").select("id").eq("guest_id", uid).eq("stato", "playing").execute()
@@ -335,8 +358,6 @@ with tab4:
         elif res_guest.data:
             st.session_state.id_sfida_attiva = res_guest.data[0]['id']
             st.toast("Bentornato nell'Arena! Ti abbiamo ricollegato in automatico.", icon="🔌")
-
-    # --- FINE RICONNESSIONE ---
 
     if "id_sfida_attiva" not in st.session_state:
         scelta_arena = st.radio("Cosa vuoi fare?", ["Crea Sfida 🏗️", "Unisciti a Sfida ⚔️"], horizontal=True)
@@ -371,7 +392,6 @@ Rispondi SOLO ed ESCLUSIVAMENTE con un array JSON avente questa struttura esatta
 Devono essere 10 elementi in totale (5 multipla, 5 aperta). Nessun testo prima o dopo l'array JSON.
 Testo: {str(testo_arena)[:3000]}"""
                         
-                        # ORA USA GEMINI, SUPER AFFIDABILE PER IL JSON
                         quiz_raw = genera_testo_gemini(prompt_quiz)
                         quiz_pulito = quiz_raw.strip().replace("```json", "").replace("```", "")
                         
@@ -391,7 +411,7 @@ Testo: {str(testo_arena)[:3000]}"""
                         st.rerun()
                     except Exception as e: st.error(f"Errore creazione arena (forse il testo era strano): {e}")
 
-        else: # Unisciti a Sfida
+        else:
             pin_inserito = st.text_input("Inserisci il PIN di 4 cifre:")
             if st.button("Entra nel Ring 🥊", type="primary"):
                 res_sfida = supabase.table("sfide_multiplayer").select("*").eq("pin", pin_inserito).eq("stato", "waiting").execute()
@@ -413,23 +433,47 @@ Testo: {str(testo_arena)[:3000]}"""
             
             if sfida['stato'] == 'waiting':
                 st.warning(f"⏳ PIN: {sfida['pin']} | In attesa dello sfidante...")
-                
-                # Permettiamo di annullare la sfida se l'amico non arriva
                 if st.button("Annulla Sfida", type="secondary"): 
                     supabase.table("sfide_multiplayer").update({"stato": "finished"}).eq("id", sfida['id']).execute()
                     del st.session_state.id_sfida_attiva
                     st.rerun()
                 else:
-                    # --- AUTO-REFRESH MAGICO ---
                     with st.spinner("Cerco lo sfidante... (La pagina si aggiorna da sola)"):
-                        time.sleep(3) # Aspetta 3 secondi
-                        st.rerun()    # Ricarica l'interfaccia
+                        time.sleep(3) 
+                        st.rerun()    
             
             elif sfida['stato'] == 'playing':
                 st.divider()
                 
                 is_host = (st.session_state.utente_loggato.id == sfida['host_id'])
                 colonna_punteggio = "punteggio_host" if is_host else "punteggio_guest"
+                colonna_risposte = "risposte_host" if is_host else "risposte_guest"
+                
+                # --- SISTEMA AFK (VITTORIA A TAVOLINO) ---
+                mio_ping_col = "last_ping_host" if is_host else "last_ping_guest"
+                suo_ping_col = "last_ping_guest" if is_host else "last_ping_host"
+                
+                adesso = time.time()
+                supabase.table("sfide_multiplayer").update({mio_ping_col: adesso}).eq("id", sfida['id']).execute()
+                
+                suo_ping = sfida.get(suo_ping_col, 0)
+                if suo_ping > 0 and (adesso - suo_ping) > 300: 
+                    st.error("🚨 L'avversario è fuggito o si è disconnesso da oltre 5 minuti!")
+                    if st.button("Reclama Vittoria a Tavolino 🏆", type="primary"):
+                        supabase.table("sfide_multiplayer").update({
+                            "stato": "finished",
+                            colonna_punteggio: 300
+                        }).eq("id", sfida['id']).execute()
+                        st.balloons()
+                        st.success("Hai vinto a tavolino per abbandono dell'avversario!")
+                        time.sleep(3)
+                        st.rerun()
+                    st.stop() 
+                
+                # Riconnessione - Conta quante risposte hai già dato
+                risposte_date = sfida.get(colonna_risposte, [])
+                if risposte_date is None: risposte_date = []
+                indice = len(risposte_date)
                 
                 col1, col2 = st.columns(2)
                 col1.metric("🔴 Punteggio Host", f"{sfida['punteggio_host']} / 300")
@@ -438,8 +482,6 @@ Testo: {str(testo_arena)[:3000]}"""
                 st.info(f"🏟️ ARENA: {sfida['materia']} | PIN: {sfida['pin']}")
                 
                 domande = sfida['domande_json']
-                if "indice_domanda" not in st.session_state: st.session_state.indice_domanda = 0
-                indice = st.session_state.indice_domanda
                 
                 if indice < len(domande):
                     d = domande[indice]
@@ -450,47 +492,68 @@ Testo: {str(testo_arena)[:3000]}"""
                         scelta = st.radio("Scegli la risposta corretta:", d.get('opzioni', []), key=f"radio_{indice}")
                         if st.button("Conferma Risposta ✅", key=f"btn_m_{indice}"):
                             
-                            # IL BUG FIX DELLE RISPOSTE E' QUI!
                             scelta_str = str(scelta).strip().lower()
                             corretta_str = str(d.get('corretta', '')).strip().lower()
                             
                             is_esatta = (scelta_str == corretta_str) or (corretta_str in scelta_str) or (scelta_str in corretta_str)
                             punti_vinti = 30 if is_esatta else 0
                             
-                            if punti_vinti == 30: 
-                                st.success("🎯 Esatto! +30 punti")
-                            else: 
-                                st.error(f"❌ Sbagliato! La corretta era: {d.get('corretta')}")
+                            if punti_vinti == 30: st.success("🎯 Esatto! +30 punti")
+                            else: st.error(f"❌ Sbagliato! La corretta era: {d.get('corretta')}")
                                 
                             nuovo_totale = sfida[colonna_punteggio] + punti_vinti
-                            supabase.table("sfide_multiplayer").update({colonna_punteggio: nuovo_totale}).eq("id", sfida['id']).execute()
+                            risposte_date.append(punti_vinti) 
+                            
+                            supabase.table("sfide_multiplayer").update({
+                                colonna_punteggio: nuovo_totale,
+                                colonna_risposte: risposte_date 
+                            }).eq("id", sfida['id']).execute()
+                            
                             time.sleep(2)
-                            st.session_state.indice_domanda += 1
                             st.rerun()
 
                     else:
                         risposta = st.text_area("Scrivi la tua risposta:", key=f"text_{indice}")
                         if st.button("Consegna al Prof 📝", key=f"btn_a_{indice}"):
                             with st.spinner("Il professore sta correggendo..."):
-                                prompt_voto = f"""Valuta questa risposta dello studente: '{risposta}'.
-Domanda: '{d['domanda']}'.
-Basati su questo testo: {sfida['appunti_testo'][:2000]}.
-REGOLE TASSATIVE PER IL VOTO:
-1. Dai SOLO un voto da 1 a 30 (scrivi solo il numero, niente altro testo).
-2. Se la risposta è composta da lettere a caso (es. 'fasd'), numeri a caso, è completamente fuori tema o palesemente errata, DEVI dare un voto da 1 a 3. NON regalare punti!"""
+                                prompt_voto = f"""Valuta questa risposta: '{risposta}'. 
+Domanda: '{d['domanda']}'. 
+Appunti: {sfida['appunti_testo'][:2000]}.
+REGOLE: Scrivi un commento sarcastico alla Dr. House. Poi vai a capo e scrivi esattamente "VOTO: X" (dove X è un numero da 1 a 30)."""
                                 try:
-                                    # ORA IL PROF USA GEMINI PER VALUTARE (Più preciso sul punteggio)
-                                    voto_str = genera_testo_gemini(prompt_voto).strip()
+                                    risposta_prof = genera_testo_gemini(prompt_voto).strip()
+                                    
+                                    if "VOTO:" in risposta_prof:
+                                        parti = risposta_prof.split("VOTO:")
+                                        commento_prof = parti[0].strip()
+                                        voto_str = parti[1].strip()
+                                    else:
+                                        commento_prof = risposta_prof
+                                        voto_str = risposta_prof 
+                                        
                                     numeri_estratti = ''.join(filter(str.isdigit, voto_str))
                                     voto = int(numeri_estratti) if numeri_estratti else 1 
                                     if voto > 30: voto = 30
-                                except: voto = 1
-                                    
-                                st.success(f"🎓 Voto del professore: {voto}/30!")
+                                except: 
+                                    commento_prof = "Il tuo livello di ignoranza ha fatto crashare il mio cervello."
+                                    voto = 1
+                                
+                                st.markdown(f"**🧑‍🏫 Il Prof dice:**\n> *{commento_prof}*")
+                                
+                                messaggio_voto = f"🎓 Voto finale: {voto}/30"
+                                if voto < 12: st.error(messaggio_voto)
+                                elif 12 <= voto <= 17: st.warning(messaggio_voto)
+                                else: st.success(messaggio_voto)
+
                                 nuovo_totale = sfida[colonna_punteggio] + voto
-                                supabase.table("sfide_multiplayer").update({colonna_punteggio: nuovo_totale}).eq("id", sfida['id']).execute()
-                                time.sleep(2)
-                                st.session_state.indice_domanda += 1
+                                risposte_date.append(voto)
+                                
+                                supabase.table("sfide_multiplayer").update({
+                                    colonna_punteggio: nuovo_totale,
+                                    colonna_risposte: risposte_date
+                                }).eq("id", sfida['id']).execute()
+                                
+                                time.sleep(4)
                                 st.rerun()
                 else:
                     st.balloons()
@@ -582,3 +645,69 @@ with tab5:
 
         except Exception as e:
             st.error(f"Errore nel caricamento del profilo: {e}")
+
+# --- FASE 6: COMMUNITY ---
+with tab6:
+    st.subheader("🌍 Community IoImparo - Portale Scambio Appunti")
+    st.write("Pubblica i tuoi riassunti migliori e cerca tra quelli degli altri studenti!")
+    
+    col_pubblica, col_esplora = st.columns([1, 2])
+    
+    with col_pubblica:
+        st.markdown("### 📤 Pubblica i tuoi Appunti")
+        st.info("Scegli un appunto dal tuo archivio privato e rendilo pubblico per aiutare la community!")
+        
+        miei_appunti = supabase.table("appunti_salvati").select("id, created_at, testo_estratto, titolo").eq("user_id", st.session_state.utente_loggato.id).eq("is_public", False).execute()
+        
+        if miei_appunti.data:
+            scelta_pubblica = st.selectbox("Scegli appunto da pubblicare:", miei_appunti.data, format_func=lambda x: f"{x['titolo']} ({x['created_at'][:10]})")
+            titolo_input = st.text_input("Modifica il Titolo (opzionale):", value=scelta_pubblica['titolo'])
+            materia_input = st.text_input("Inserisci la Materia:")
+            
+            if st.button("Rendi Pubblico 🌍", type="primary") and materia_input:
+                supabase.table("appunti_salvati").update({
+                    "is_public": True,
+                    "titolo": titolo_input,
+                    "materia": materia_input
+                }).eq("id", scelta_pubblica['id']).execute()
+                st.success("Appunti pubblicati! Ora tutti possono vederli.")
+                time.sleep(1)
+                st.rerun()
+        else:
+            st.warning("Non hai appunti privati da pubblicare. Creane uno nella Fase 1!")
+
+    with col_esplora:
+        st.markdown("### 🔍 Esplora l'Archivio Pubblico")
+        ricerca = st.text_input("Cerca per titolo o materia...", placeholder="Es. Anatomia, Chimica...")
+        
+        query_community = supabase.table("appunti_salvati").select("*").eq("is_public", True)
+        if ricerca:
+            query_community = query_community.ilike("titolo", f"%{ricerca}%")
+            
+        appunti_pubblici = query_community.order("titolo").execute()
+        
+        if appunti_pubblici.data:
+            st.write(f"Trovati {len(appunti_pubblici.data)} appunti pubblici:")
+            for ap in appunti_pubblici.data:
+                with st.expander(f"📖 {ap['titolo']} | 🧬 {ap['materia']}"):
+                    st.caption("Anteprima del testo:")
+                    st.write(ap['testo_estratto'][:300] + "... [Continua]")
+                    
+                    st.divider()
+                    col_mail_1, col_mail_2 = st.columns([3, 1])
+                    with col_mail_1:
+                        email_destinatario = st.text_input("Ricevi il file completo:", placeholder="La tua email...", key=f"mail_input_{ap['id']}")
+                    with col_mail_2:
+                        st.write("") 
+                        if st.button("Invia Email ✉️", key=f"btn_mail_{ap['id']}", use_container_width=True):
+                            if email_destinatario:
+                                with st.spinner("Invio in corso..."):
+                                    esito = invia_email_appunti(email_destinatario, ap['titolo'], ap['materia'], ap['testo_estratto'])
+                                    if esito:
+                                        st.success("Inviato! Controlla la posta.")
+                                    else:
+                                        st.error("Errore nell'invio! Hai configurato i Secrets EMAIL_SENDER e EMAIL_PASSWORD?")
+                            else:
+                                st.warning("Inserisci l'email!")
+        else:
+            st.info("Nessun risultato trovato. Sii il primo a pubblicare!")
