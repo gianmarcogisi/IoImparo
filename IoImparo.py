@@ -14,6 +14,50 @@ api_key = os.getenv("GEMINI_API_KEY")
 supabase_url = st.secrets["https://ofljlrtssnawuzbgfmto.supabase.com"]
 supabase_key = st.secrets["eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9mbGpscnRzc25hd3V6YmdmbXRvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ0Mjk0MzcsImV4cCI6MjA5MDAwNTQzN30.tErsqeL80N37VHo0oIBwuXHwqLAkwAMRphJj5PAC3HU"]
 supabase: Client = create_client(supabase_url, supabase_key)
+# --- GESTIONE SESSIONE UTENTE ---
+if "utente_loggato" not in st.session_state:
+    st.session_state.utente_loggato = None
+
+# --- SIDEBAR: LOGIN E REGISTRAZIONE ---
+with st.sidebar:
+    st.image("https://img.icons8.com/fluent/100/000000/graduation-cap.png", width=100)
+    st.title("Area Riservata")
+    
+    if st.session_state.utente_loggato is None:
+        scelta_auth = st.radio("Cosa vuoi fare?", ["Accedi", "Registrati"])
+        email = st.text_input("Email")
+        password = st.text_input("Password", type="password")
+        
+        if scelta_auth == "Registrati":
+            if st.button("Crea Account 🚀"):
+                try:
+                    res = supabase.auth.sign_up({"email": email, "password": password})
+                    st.success("Ti abbiamo inviato un'email di conferma! Controlla la posta (anche spam).")
+                except Exception as e:
+                    st.error(f"Errore registrazione: {e}")
+        
+        else: # Login
+            if st.button("Entra nell'Arena 🔑"):
+                try:
+                    res = supabase.auth.sign_in_with_password({"email": email, "password": password})
+                    st.session_state.utente_loggato = res.user
+                    st.success(f"Bentornato!")
+                    st.rerun() # Ricarica per sbloccare l'app
+                except Exception as e:
+                    st.error("Email o Password errati.")
+    else:
+        st.write(f"Socio: **{st.session_state.utente_loggato.email}**")
+        if st.button("Esci 🚪"):
+            supabase.auth.sign_out()
+            st.session_state.utente_loggato = None
+            st.rerun()
+
+# --- IL MURO DI PROTEZIONE ---
+if st.session_state.utente_loggato is None:
+    st.warning("⚠️ Per usare IoImparo devi prima accedere o registrarti dalla barra laterale!")
+    st.stop() # Blocca l'esecuzione di tutto quello che c'è sotto!
+
+# DA QUI IN POI C'È IL TUO CODICE DELLE SCHEDE (TAB1, TAB2, TAB3...)
 
 # Nome ufficiale dell'App!
 NOME_APP = "IoImparo 🎓"
