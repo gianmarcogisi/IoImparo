@@ -1,6 +1,5 @@
 import streamlit as st
 import os
-from dotenv import load_dotenv
 from google import genai
 from PIL import Image
 import PyPDF2
