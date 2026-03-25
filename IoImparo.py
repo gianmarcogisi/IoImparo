@@ -91,14 +91,22 @@ if st.session_state.utente_loggato is None:
             except Exception as e: st.error(f"Errore: {e}")
     st.stop() 
 
-# --- 5. SIDEBAR ---
-with st.sidebar:
-    st.image("https://img.icons8.com/fluent/100/000000/graduation-cap.png", width=100)
-    st.title("Area Riservata")
-    st.write(f"Socio: **{st.session_state.utente_loggato.email}**")
-    if st.button("Esci (Logout)"):
-        st.session_state.utente_loggato = None
-        st.rerun()
+    # --- 5 & 7. INTERFACCIA PRINCIPALE & MENU A TENDINA ---
+col_titolo, col_profilo = st.columns([4, 1])
+
+with col_titolo:
+    st.title(f"🎓 Centrale Operativa {NOME_APP}")
+
+with col_profilo:
+    st.write("") # Piccolo trucco per allineare il bottone in basso
+    with st.popover("👤 Area Riservata", use_container_width=True):
+        st.image("https://img.icons8.com/fluent/100/000000/graduation-cap.png", width=50)
+        st.write(f"Socio:\n`{st.session_state.utente_loggato.email}`")
+        if st.button("Esci (Logout)", use_container_width=True):
+            st.session_state.utente_loggato = None
+            st.rerun()
+
+st.divider()
 
 # --- 6. PDF ---
 def genera_pdf_scaricabile(testo):
@@ -124,9 +132,7 @@ def genera_pdf_scaricabile(testo):
     buf.seek(0)
     return buf
 
-# --- 7. INTERFACCIA PRINCIPALE ---
-st.title(f"🎓 Centrale Operativa {NOME_APP}")
-st.divider()
+
 
 # NUOVO TABS CHE INCLUDE LA FASE 5
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
