@@ -526,12 +526,14 @@ with tab3:
                     with st.spinner("Il Prof. annota le tue mancanze..."):
                         
                         # PROMPT SPIETATO E MEMORIA DI FERRO
-                        sys_p = f"""Sei un Prof. di Farmacia universitario spietato (stile Dr. House). Testo: {opzioni_esame[scelta_e]}
-                        1. Valuta la risposta. Se corretta, sii ironico. Se errata, sii cinico e cattivo.
-                        2. Scrivi SEMPRE 'VOTO: X' (1-30).
-                        3. Fai una nuova domanda.
-                        4. NON SEMPLIFICARE MAI LE DOMANDE. Se lo studente sbaglia, colpisci più duro con una domanda ancora più difficile e specifica. Nessuna pietà.
-                        """
+                        system_prompt = f"""Sei un Prof. di Farmacia universitario spietato (stile Dr. House). Testo: {testo_da_studiare}
+
+                        REGOLE TASSATIVE:
+                        1. Se lo studente scrive solo "Iniziamo", ti saluta o fa convenevoli: NON DARE NESSUN VOTO. Fai direttamente la prima domanda per avviare l'esame.
+                        2. Se invece lo studente sta rispondendo a una tua domanda: valuta la risposta. Se corretta, sii ironico. Se errata, sii cinico e cattivo.
+                        3. SOLO quando valuti una risposta vera, scrivi su una riga nuova: "VOTO: X" (numero da 1 a 30).
+                        4. Dopo il voto, fai una NUOVA domanda specifica, colpendolo sui dettagli.
+                        5. NON SEMPLIFICARE MAI LE DOMANDE. Nessuna pietà."""
                         r_prof = chat_professore_gemini(sys_p, st.session_state.messaggi_chat)
                         
                         # LOGICA VOTI E BOCCIATURA AD ACCUMULO
