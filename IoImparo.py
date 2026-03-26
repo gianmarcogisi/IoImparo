@@ -257,8 +257,11 @@ with tab1:
 --- SEZIONE 1: TRASCRIZIONE ---
 (Se ti ho fornito un'immagine, trascrivi fedelmente tutto il testo che vedi. Se è un PDF testuale, scrivi semplicemente: 'Documento digitale riconosciuto').
 
---- SEZIONE 2: SCHEMA CONCETTUALE VISIVO ---
-(ABBANDONA la noiosa lista a punti! Crea una mappa concettuale testuale. Usa simboli come ├──, └── e frecce ➡️ per creare diagrammi di flusso ad albero. Se ci sono elementi da confrontare, disegna una bella Tabella Markdown. Organizza le informazioni in modo che l'occhio colga subito la gerarchia dei concetti).
+--- SEZIONE 2: SCHEMA CONCETTUALE GRAFICO (Mermaid.js) ---
+(Genera ESCLUSIVAMENTE codice Mermaid.js valido per creare un diagramma. Scegli il tipo più adatto tra:
+1. Flowchart (`graph TD` o `graph LR`) per processi, cicli e relazioni causa-effetto.
+2. Mindmap (`mindmap`) per gerarchie pure e ramificazioni concettuali.
+Non aggiungere commenti, spiegazioni o testo Markdown (come ```mermaid) prima o dopo il codice. Inizia direttamente con 'graph...' o 'mindmap...'. Assicurati che il testo all'interno dei nodi sia breve e chiaro).
 
 --- SEZIONE 3: RIASSUNTO COMPLETO ---
 (Scrivi un riassunto discorsivo, chiaro e approfondito per studiare, evidenziando in grassetto le parole chiave)."""]
@@ -306,8 +309,51 @@ with tab1:
                     except Exception as e: 
                         st.error(f"Errore DB: {e}")
                     
-                    st.markdown(response.text)
+                    # --- GESTIONE INTELLIGENTE OUTPUT (GRAFICO + TESTO) ---
+                    text_output = response.text
+
+                    # Separazione logica delle sezioni basata sui separatori del prompt
+                    try:
+                        parti = text_output.split("---")
+                        # parti[0] è vuoto perché il testo inizia con ---
+                        trascrizione = parti[1].replace("SEZIONE 1: TRASCRIZIONE", "").replace("---", "").strip()
+                        codice_mermaid = parti[2].replace("SEZIONE 2: SCHEMA CONCETTUALE GRAFICO (Mermaid.js)", "").replace("---", "").strip()
+                        riassunto = parti[3].replace("SEZIONE 3: RIASSUNTO COMPLETO", "").replace("---", "").strip()
+                    except:
+                        # Fallback di sicurezza se Gemini sbaglia i trattini
+                        trascrizione, codice_mermaid, riassunto = "", "", text_output
+
+                    # 1. Visualizzazione Trascrizione
+                    st.markdown("### 📝 Trascrizione")
+                    st.write(trascrizione if trascrizione else "Documento digitale riconosciuto.")
+
+                    # 2. Visualizzazione Grafica (Mermaid.js)
+                    st.markdown("### 🖼️ Schema Concettuale Visivo")
+                    
+                    if codice_mermaid and ("graph" in codice_mermaid or "mindmap" in codice_mermaid or "flowchart" in codice_mermaid):
+                        # Pulisci eventuale markdown extra di Gemini
+                        codice_mermaid = codice_mermaid.replace("```mermaid", "").replace("```", "").strip()
+                        
+                        html_code = f"""
+                        <div class="mermaid" style="display: flex; justify-content: center; background: white; border-radius: 10px; padding: 20px;">
+                        {codice_mermaid}
+                        </div>
+                        <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+                        <script>
+                            mermaid.initialize({{ startOnLoad: true, theme: 'base', themeVariables: {{ 'primaryColor': '#4F46E5', 'primaryTextColor': '#fff', 'lineColor': '#4F46E5' }}}});
+                        </script>
+                        """
+                        st.components.v1.html(html_code, height=600, scrolling=True)
+                    else:
+                        st.warning("⚠️ Impossibile generare uno schema grafico per questo materiale.")
+                        st.info(codice_mermaid if codice_mermaid else "Nessuno schema generato.")
+
+                    # 3. Visualizzazione Riassunto
+                    st.markdown("### 📖 Riassunto Completo")
+                    st.markdown(riassunto)
+                    
                     st.balloons()
+                            
                 except Exception as e:
                     if "503" in str(e): st.warning("⏳ Server Google intasati. Riprova tra poco!")
                     else: st.error(f"Errore: {e}")
