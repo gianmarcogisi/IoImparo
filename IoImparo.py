@@ -218,19 +218,14 @@ with tab1:
             "Saggi e Dosaggi dei Farmaci", "Biochimica Applicata", "Fitoterapia", "Igiene"
         ]
         
-        titolo_appunto = "Appunto Privato"
-        materia_appunto = "Generica"
+        # I campi ora appaiono SEMPRE, sia per il Pubblico che per il Privato
+        titolo_appunto = st.text_input("Dai un titolo chiaro (es. Enzimi):")
+        materia_appunto = st.selectbox("Seleziona la Materia:", lista_materie)
         
-        # Se sceglie Pubblico, compaiono i campi
-        if is_public:
-            titolo_appunto = st.text_input("Dai un titolo chiaro (es. Enzimi):")
-            # Usa la tendina invece del testo libero!
-            materia_appunto = st.selectbox("Seleziona la Materia:", lista_materie)
-            
-            # Se il titolo è vuoto, blocca il bottone per evitare salvataggi anonimi
-            if not titolo_appunto:
-                st.warning("⚠️ Inserisci un Titolo per poter pubblicare.")
-                troppe_foto = True # Ricicliamo questa variabile per disabilitare il bottone
+        # Controllo che il titolo non sia vuoto per non avere un Archivio disordinato
+        if not titolo_appunto:
+            st.warning("⚠️ Inserisci un Titolo per poter salvare i tuoi appunti.")
+            troppe_foto = True # Blocca il bottone finché non scrivi il titolo
 
         bottone_elabora = st.button("Spremi Appunti 🪄", type="primary", use_container_width=True, disabled=troppe_foto)
 
