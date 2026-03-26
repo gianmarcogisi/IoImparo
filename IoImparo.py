@@ -538,15 +538,36 @@ TESTO DEGLI APPUNTI:
                 if st.button("Ricomincia da capo 🔄", key="cards_reset_btn"):
                     st.session_state.indice_flashcard = 0
                     st.rerun()
+              
 with tab3:
     st.subheader("🧑‍🏫 Simulazione Esame Orale")
-    st.write("Mettiti alla prova! Il Prof. Gemini ti farà domande specifiche sui tuoi appunti per testare la tua preparazione.")
+    st.write("Scegli un argomento e mettiti alla prova! Il Prof. Gemini ti interrogherà per testare la tua preparazione.")
     
-    if not st.session_state.testo_pulito_studente:
-        st.warning("⚠️ Devi prima 'Spremere gli Appunti' nella Fase 1 per poter sostenere l'esame!")
+    # --- LOGICA DI RECUPERO ARGOMENTI (Come in Fase 2) ---
+    opzioni_esame = {}
+    
+    # 1. Appunti attuali
+    if st.session_state.testo_pulito_studente:
+        opzioni_esame["✨ Appunti appena elaborati in Fase 1"] = st.session_state.testo_pulito_studente
+        
+    # 2. Archivio dal Database
+    try:
+        miei_appunti_db = supabase.table("appunti_salvati").select("id, titolo, materia, testo_estratto").eq("user_id", st.session_state.utente_loggato.id).order("created_at", desc=True).execute()
+        for ap in miei_appunti_db.data:
+            etichetta = f"📁 {ap['titolo']} | {ap['materia']}"
+            opzioni_esame[etichetta] = ap['testo_estratto']
+    except:
+        pass
+
+    if not opzioni_esame:
+        st.warning("⚠️ Non hai appunti pronti! Vai nella Fase 1 per elaborarne uno o controlla il tuo Archivio Privato.")
     else:
-        # Tasto per azzerare l'interrogazione
-        if st.button("🔄 Ricomincia Esame", type="secondary"):
+        # MENU DI SELEZIONE ARGOMENTO
+        scelta_esame = st.selectbox("📚 Su quale argomento vuoi essere interrogato?", list(opzioni_esame.keys()), key="select_esame")
+        testo_da_studiare = opzioni_esame[scelta_esame]
+
+        # Tasto per azzerare l'interrogazione (indispensabile se si cambia argomento)
+        if st.button("🔄 Inizia/Ricomincia Esame", type="secondary", use_container_width=True):
             st.session_state.messaggi_chat = []
             st.rerun()
             
@@ -557,29 +578,28 @@ with tab3:
             with st.chat_message(msg["ruolo"]):
                 st.markdown(msg["contenuto"])
                 
-        # 2. Se la chat è vuota, il Prof fa il primo passo
+        # 2. Se la chat è vuota, il Prof fa la prima mossa
         if len(st.session_state.messaggi_chat) == 0:
             with st.chat_message("assistant"):
-                saluto = "Buongiorno! Ho letto attentamente i tuoi appunti. Quando ti senti pronto, scrivimi 'Iniziamo' e ti farò la prima domanda."
+                nome_argomento = scelta_esame.split("|")[0].replace("📁 ", "").replace("✨ ", "")
+                saluto = f"Buongiorno! Sono pronto per l'esame su: **{nome_argomento}**. Quando vuoi iniziare, scrivimi 'Iniziamo' o rispondi alla mia prima domanda!"
                 st.markdown(saluto)
                 st.session_state.messaggi_chat.append({"ruolo": "assistant", "contenuto": saluto})
         
         # 3. Input dello studente
-        if prompt_studente := st.chat_input("Scrivi la tua risposta qui..."):
+        if prompt_studente := st.chat_input("Rispondi al professore..."):
             
-            # Mostra a schermo quello che hai scritto tu
             with st.chat_message("user"):
                 st.markdown(prompt_studente)
             st.session_state.messaggi_chat.append({"ruolo": "user", "contenuto": prompt_studente})
             
-            # 4. Genera la risposta e la nuova domanda del Professore
+            # 4. Risposta del Professore basata sul TESTO SELEZIONATO
             with st.chat_message("assistant"):
-                with st.spinner("Il professore ti sta ascoltando..."):
+                with st.spinner("Il professore valuta la tua risposta..."):
                     
-                    # Istruzioni segrete per il comportamento del Professore
-                    system_prompt = f"""Sei un professore universitario severo ma incoraggiante. 
-Stai interrogando lo studente ESCLUSIVAMENTE su questo materiale: 
-{st.session_state.testo_pulito_studente}
+                    system_prompt = f"""Sei un professore universitario esperto. 
+Stai interrogando lo studente esclusivamente su questo materiale: 
+{testo_da_studiare}
 
 Regole ferree della simulazione:
 1. Fai UNA SOLA domanda alla volta. Non fare elenchi di domande.
@@ -590,16 +610,11 @@ Regole ferree della simulazione:
 6. Usa un tono accademico, professionale ma empatico."""
                     
                     try:
-                        # Chiama la funzione magica che abbiamo definito in cima al file
                         risposta_prof = chat_professore_gemini(system_prompt, st.session_state.messaggi_chat)
                         st.markdown(risposta_prof)
                         st.session_state.messaggi_chat.append({"ruolo": "assistant", "contenuto": risposta_prof})
                     except Exception as e:
-                        if "503" in str(e): 
-                            st.warning("⏳ I server di Google stanno prendendo fiato. Riprova tra 10 secondi!")
-                        else: 
-                            st.error(f"Errore di connessione col professore: {e}")               
-
+                        st.error(f"Il professore ha avuto un calo di zuccheri: {e}")
 with tab4:
     st.subheader("🧪 Arena di Farmacia")
 
