@@ -182,7 +182,7 @@ with tab1:
         if is_foto:
             file_input = st.file_uploader(
                 "Scegli le foto degli appunti (Max 150)", 
-                # ABBIAMO RIMOSSO LA RIGA 'type' PER SBLOCCARE ANDROID
+                type=['png', 'jpg', 'jpeg', 'webp', 'heic'], # <-- TERAPIA RIPRISTINATA
                 accept_multiple_files=True, 
                 key="canale_foto_multiplo"
             )
