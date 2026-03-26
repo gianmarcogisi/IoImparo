@@ -256,25 +256,32 @@ with tab1:
 
                 with st.spinner("🧠 Il Prof. Gemini sta analizzando i tuoi appunti... (Questa operazione richiede qualche secondo)"):
                     try:
-                        # 1. IL PROMPT BLINDATO PER I GRAFICI
-                        contenuti = ["""Agisci come il miglior assistente universitario del mondo. 
+                        # 1. LA LOGICA DI TRASCRIZIONE LA DECIDE PYTHON, NON L'IA!
+                        if is_foto:
+                            istruzioni_trascrizione = "Trascrivi fedelmente e integralmente tutto il testo leggibile nell'immagine."
+                        else:
+                            istruzioni_trascrizione = "Scrivi ESATTAMENTE E SOLO questa frase: '📄 Documento PDF riconosciuto in memoria. Nessuna trascrizione necessaria.' (Non aggiungere assolutamente altro testo in questa sezione)."
+
+                        # 2. IL PROMPT BLINDATO
+                        contenuti = [f"""Agisci come il miglior assistente universitario del mondo. 
 Dividi la tua risposta ESATTAMENTE usando questi tag speciali (non usare nient'altro per dividere le sezioni):
 
 [TRASCRIZIONE]
-(Se immagine, trascrivi il testo. Se PDF, scrivi solo 'Documento riconosciuto').
+{istruzioni_trascrizione}
 [/TRASCRIZIONE]
 
 [SCHEMA]
-(Genera ESCLUSIVAMENTE codice Mermaid.js valido per un flowchart o mindmap.
-REGOLE CRITICHE PER NON FAR CRASHARE IL SISTEMA: 
-1. Vai a capo dopo ogni collegamento (usa il tasto INVIO). Non scrivere tutto su una riga!
-2. I testi dentro i nodi devono essere BREVISSIMI (massimo 3-5 parole). Usa abbreviazioni.
-3. NON USARE MAI parentesi, virgolette o punteggiatura strana nei testi dei nodi.
-4. Inizia subito con graph TD o mindmap. Niente markdown extra.)
+Genera ESCLUSIVAMENTE codice Mermaid.js valido.
+REGOLE TASSATIVE PER EVITARE CRASH VISIVI:
+1. Usa solo il formato `graph TD`.
+2. Sintassi rigorosa obbligatoria: `A[Testo] --> B[Altro Testo]`.
+3. I testi nei nodi devono avere MASSIMO 3 PAROLE. Sii iper-sintetico!
+4. NESSUN carattere speciale, niente virgole, niente apici, niente parentesi tonde dentro i testi. Solo lettere e numeri.
+5. Inizia direttamente la prima riga con `graph TD`, senza nessun markdown come ```mermaid.
 [/SCHEMA]
 
 [RIASSUNTO]
-(Scrivi un riassunto discorsivo, chiaro ed esaustivo con le parole chiave in grassetto).
+Scrivi un riassunto discorsivo, chiaro ed esaustivo con le parole chiave in grassetto.
 [/RIASSUNTO]"""]
                         
                         if is_foto:
@@ -287,7 +294,7 @@ REGOLE CRITICHE PER NON FAR CRASHARE IL SISTEMA:
                         st.session_state.testo_pulito_studente = response.text
                         st.session_state.riassunto_pdf = genera_pdf_scaricabile(response.text)
                         
-                        # --- 2. GESTIONE OUTPUT INTELLIGENTE ---
+                        # --- 3. GESTIONE OUTPUT INTELLIGENTE ---
                         testo_gemini = response.text
                         
                         try:
@@ -295,20 +302,32 @@ REGOLE CRITICHE PER NON FAR CRASHARE IL SISTEMA:
                             codice_mermaid = testo_gemini.split("[SCHEMA]")[1].split("[/SCHEMA]")[0].strip()
                             riassunto = testo_gemini.split("[RIASSUNTO]")[1].split("[/RIASSUNTO]")[0].strip()
                         except:
-                            trascrizione, codice_mermaid, riassunto = "", "", testo_gemini # Fallback di emergenza
+                            trascrizione, codice_mermaid, riassunto = "", "", testo_gemini 
 
                         # Mostra Trascrizione
                         st.markdown("### 📝 Trascrizione")
                         st.write(trascrizione if trascrizione else "Documento elaborato.")
 
-                        # Mostra Schema Grafico (SISTEMA NATIVO DI STREAMLIT)
+                        # Mostra Schema Grafico (FORZIAMO IL RENDERING HTML MODERNO)
                         st.markdown("### 🖼️ Schema Concettuale Visivo")
-                        if codice_mermaid and ("graph" in codice_mermaid or "mindmap" in codice_mermaid or "flowchart" in codice_mermaid):
-                            # Puliamo eventuali errori di markdown di Gemini
+                        if codice_mermaid and "graph" in codice_mermaid:
                             codice_mermaid = codice_mermaid.replace("```mermaid", "").replace("```", "").strip()
                             
-                            # Streamlit disegna in automatico se usi i tre apici inversi + mermaid
-                            st.markdown(f"```mermaid\n{codice_mermaid}\n```")
+                            html_code = f"""
+                            <!DOCTYPE html>
+                            <html>
+                            <body>
+                                <script type="module">
+                                    import mermaid from '[https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs](https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs)';
+                                    mermaid.initialize({{ startOnLoad: true, theme: 'default' }});
+                                </script>
+                                <div class="mermaid" style="display: flex; justify-content: center; background: white; padding: 20px; border-radius: 10px;">
+                                    {codice_mermaid}
+                                </div>
+                            </body>
+                            </html>
+                            """
+                            st.components.v1.html(html_code, height=600, scrolling=True)
                         else:
                             st.warning("⚠️ Impossibile generare uno schema grafico pulito per questo materiale.")
                             if codice_mermaid: st.info(codice_mermaid)
@@ -317,7 +336,7 @@ REGOLE CRITICHE PER NON FAR CRASHARE IL SISTEMA:
                         st.markdown("### 📖 Riassunto Completo")
                         st.markdown(riassunto)
 
-                        # --- 3. IL SALVATAGGIO NEL DATABASE ---
+                        # --- 4. IL SALVATAGGIO NEL DATABASE ---
                         try:
                             supabase.table("appunti_salvati").insert({
                                 "user_id": st.session_state.utente_loggato.id,
@@ -342,6 +361,12 @@ REGOLE CRITICHE PER NON FAR CRASHARE IL SISTEMA:
                                     
                         except Exception as db_e: 
                             st.error(f"Errore DB: {db_e}")
+                        
+                        st.balloons()
+                        
+                    except Exception as e:
+                        if "503" in str(e): st.warning("⏳ Server Google intasati. Riprova tra poco!")
+                        else: st.error(f"Errore Gemini: {e}")
                         
                         st.balloons()
                         
