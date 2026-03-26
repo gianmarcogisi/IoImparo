@@ -397,237 +397,130 @@ Scrivi un riassunto discorsivo, chiaro, con le parole chiave in grassetto.
                 use_container_width=True
             )
 
-with tab2: 
+with tab2:
     st.subheader("⚡ Flashcard Visive & Dinamiche")
     
-    # Inizializzazione variabili di memoria per le carte
     if "flashcards" not in st.session_state: st.session_state.flashcards = []
     if "indice_flashcard" not in st.session_state: st.session_state.indice_flashcard = 0
     
-    # --- NUOVA LOGICA: PESCHIAMO DALL'ARCHIVIO E DALLA FASE 1 ---
     opzioni_appunti = {}
-    
-    # 1. Aggiungiamo gli appunti appena elaborati (se ci sono)
     if st.session_state.testo_pulito_studente:
-        opzioni_appunti["✨ Appunti appena elaborati in Fase 1"] = st.session_state.testo_pulito_studente
-        
-    # 2. Peschiamo dal Database tutti gli appunti salvati dall'utente
+        opzioni_appunti["✨ Appunti Fase 1"] = st.session_state.testo_pulito_studente
     try:
         miei_appunti = supabase.table("appunti_salvati").select("id, titolo, materia, testo_estratto").eq("user_id", st.session_state.utente_loggato.id).order("created_at", desc=True).execute()
         for ap in miei_appunti.data:
-            etichetta = f"📁 {ap['titolo']} | {ap['materia']}"
-            opzioni_appunti[etichetta] = ap['testo_estratto']
-    except Exception as e:
-        pass # Se c'è un errore di connessione, mostrerà solo quelli della Fase 1
+            opzioni_appunti[f"📁 {ap['titolo']} | {ap['materia']}"] = ap['testo_estratto']
+    except: pass
         
-    # --- CONTROLLO: SE NON HA NIENTE, AVVISO ---
     if not opzioni_appunti:
-        st.warning("⚠️ Vai prima nella Fase 1 e 'Spremi gli Appunti' per poter generare le tue carte, oppure carica qualcosa dal tuo Archivio!")
+        st.warning("⚠️ Carica qualcosa in Fase 1 o nell'Archivio!")
     else:
-        # MENU A TENDINA PER SCEGLIERE L'ARGOMENTO
-        scelta_titolo = st.selectbox("📚 Scegli l'argomento da ripassare:", list(opzioni_appunti.keys()))
-        testo_appunti_da_usare = opzioni_appunti[scelta_titolo]
+        scelta_titolo = st.selectbox("📚 Argomento:", list(opzioni_appunti.keys()), key="sel_f2")
+        testo_f2 = opzioni_appunti[scelta_titolo]
 
         col_f1, col_f2 = st.columns([2, 1])
-        with col_f1:
-            num_cards = st.slider("Quante Flashcard vuoi generare?", 5, 30, 10, key="cards_slider")
+        with col_f1: num_cards = st.slider("Numero carte:", 5, 30, 10)
         with col_f2:
             st.write("")
-            st.write("")
-            if st.button("Genera Mazzo Visivo 🃏", type="primary", use_container_width=True, key="cards_gen_btn"):
-                with st.spinner(f"⏳ Il Prof. Gemini sta studiando '{scelta_titolo.split('|')[0]}' per te..."):
-                    
-                    # PROMPT SUPER-SICURO (senza f-string che fanno crashare Python)
-                    prompt_flash = """Agisci come il miglior professore universitario. 
-Estrai """ + str(num_cards) + """ concetti chiave dal testo fornito e crea delle flashcard.
-Devi restituire ESATTAMENTE E SOLO un array JSON valido, senza nient'altro.
-
-Regole "tipo_visuale":
-- Scrivi "molecola" (per farmaci, principi attivi, molecole chimiche)
-- Scrivi "immagine" (per anatomia, strumenti, cellule, organi, macchinari)
-- Scrivi "nessuno" (per concetti puramente teorici o legislativi)
-
-Regole "query_visuale":
-- Se "molecola", SOLO IL NOME IN INGLESE (es. "paracetamol", "ibuprofen").
-- Se "immagine", breve parola chiave in inglese (es. "heart anatomy").
-- Se "nessuno", lascia vuoto "".
-
-ESEMPIO JSON OBBLIGATORIO:
-[
-  {
-    "domanda": "Cos'è questa molecola?",
-    "tipo_visuale": "molecola",
-    "query_visuale": "paracetamol",
-    "risposta": "È il Paracetamolo."
-  }
-]
-
-TESTO DEGLI APPUNTI:
-""" + testo_appunti_da_usare
-
+            if st.button("Genera Mazzo 🃏", type="primary", use_container_width=True):
+                with st.spinner("L'IA sta disegnando..."):
+                    prompt_f = f"Agisci come un prof. Crea {num_cards} flashcard JSON: [{{'domanda': '...', 'tipo_visuale': 'molecola/immagine/nessuno', 'query_visuale': 'inglese_breve', 'risposta': '...'}}]. Testo: {testo_f2}"
                     try:
-                        res = client.models.generate_content(model='gemini-2.5-flash', contents=prompt_flash)
-                        # Pulizia stringa per estrarre solo il JSON puro
-                        testo_json = res.text.replace("```json", "").replace("```", "").strip()
-                        st.session_state.flashcards = json.loads(testo_json)
+                        res = client.models.generate_content(model='gemini-2.5-flash', contents=prompt_f)
+                        st.session_state.flashcards = json.loads(res.text.replace("```json", "").replace("```", "").strip())
                         st.session_state.indice_flashcard = 0
-                        st.rerun() # Ricarica per mostrare subito la prima carta
-                    except Exception as e:
-                        st.error(f"Errore nella generazione delle carte. L'IA ha fatto confusione. Riprova! (Dettaglio: {e})")
+                        st.rerun()
+                    except: st.error("Errore generazione JSON.")
 
-        # --- MOTORE DI VISUALIZZAZIONE DELLE CARTE ---
         if st.session_state.flashcards:
-            carte = st.session_state.flashcards
             idx = st.session_state.indice_flashcard
+            carta = st.session_state.flashcards[idx]
             
-            if idx < len(carte):
-                carta = carte[idx]
+            with st.container(border=True):
+                st.write(f"### Carta {idx+1} di {len(st.session_state.flashcards)}")
+                st.markdown(f"#### ❓ {carta.get('domanda')}")
                 
-                st.markdown("---")
-                st.markdown(f"### 🃏 Carta {idx + 1} di {len(carte)}")
+                t_v = carta.get('tipo_visuale')
+                q_v = str(carta.get('query_visuale', '')).replace(" ", "_")
                 
-                # IL FRONTE DELLA CARTA (Domanda + Immagine)
-                with st.container(border=True):
-                    st.markdown(f"#### ❓ {carta.get('domanda', 'Domanda')}")
-                    
-                    tipo_vis = carta.get('tipo_visuale', 'nessuno')
-                    query_vis = carta.get('query_visuale', '')
-                    
-                    # LOGICA VISUALE POTENZIATA E ANONIMA
-                    if tipo_vis == 'molecola' and query_vis != "":
-                        # 1. TENTATIVO PUBCHEM
-                        pubchem_url = f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/{query_vis}/PNG"
-                        st.image(pubchem_url, width=300, caption="🖼️ Struttura molecolare (Riconoscila!)")
+                if t_v == 'molecola' and q_v:
+                    url = f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/{q_v}/PNG"
+                    st.image(url, width=300, caption="Struttura chimica (Riconoscila!)")
+                elif t_v == 'immagine' and q_v:
+                    # Query pulita per evitare il simbolo rotto (🖼️0)
+                    url = f"https://image.pollinations.ai/prompt/{q_v}_scientific_illustration_clean_background?width=512&height=512&nologo=true"
+                    st.image(url, width=400, caption="Rappresentazione concettuale")
 
-                        # 2. ANTEPRIMA DIAGRAMMA POLLINATIONS (FALLBACK)
-                        with st.expander("🖼️ Anteprima diagramma (se la struttura sopra non carica)"):
-                            query_diagramma = str(query_vis).replace(' ', '_') + "_molecular_diagram"
-                            img_url_fall = f"https://image.pollinations.ai/prompt/{query_diagramma}?width=300&height=200&nologo=true"
-                            st.image(img_url_fall, width=300, caption="Diagramma di contesto")
-                    
-                    elif tipo_vis == 'immagine' and query_vis != "":
-                        query_pulita = str(query_vis).replace(' ', '_')
-                        img_url = f"https://image.pollinations.ai/prompt/{query_pulita}?width=400&height=300&nologo=true"
-                        st.image(img_url, width=400, caption=f"Rappresentazione Visiva")
-                
-                # IL RETRO DELLA CARTA (Risposta Nascosta)
                 with st.expander("Gira la Carta 🔄"):
-                    st.success(f"**💡 Risposta:** {carta.get('risposta', 'Nessuna risposta generata')}")
-                
-                st.write("")
-                
-                # PULSANTI DI NAVIGAZIONE
-                col_btn1, col_btn2, col_btn3 = st.columns([1, 2, 1])
-                with col_btn1:
-                    if st.button("⬅️ Precedente", use_container_width=True, disabled=(idx == 0), key="cards_prev_btn"):
-                        st.session_state.indice_flashcard -= 1
-                        st.rerun()
-                with col_btn3:
-                    if st.button("Prossima ➡️", use_container_width=True, disabled=(idx == len(carte) - 1), key="cards_next_btn"):
-                        st.session_state.indice_flashcard += 1
-                        st.rerun()
-            else:
-                st.success("🎉 Complimenti! Hai completato tutto il mazzo di appunti. Sei pronto per l'esame!")
-                if st.button("Ricomincia da capo 🔄", key="cards_reset_btn"):
-                    st.session_state.indice_flashcard = 0
-                    st.rerun()
-              
+                    st.success(f"**Risposta:** {carta.get('risposta')}")
+
+            c1, c2, c3 = st.columns(3)
+            if c1.button("⬅️", disabled=idx==0): 
+                st.session_state.indice_flashcard -= 1
+                st.rerun()
+            if c3.button("➡️", disabled=idx==len(st.session_state.flashcards)-1):
+                st.session_state.indice_flashcard += 1
+                st.rerun()
+
 with tab3:
     st.subheader("🧑‍🏫 Simulazione Esame Orale")
-    st.write("Scegli un argomento e preparati alla sferzata del Prof!")
     
-    # --- LOGICA DI RECUPERO ARGOMENTI ---
     opzioni_esame = {}
     if st.session_state.testo_pulito_studente:
-        opzioni_esame["✨ Appunti appena elaborati in Fase 1"] = st.session_state.testo_pulito_studente
+        opzioni_esame["✨ Appunti Fase 1"] = st.session_state.testo_pulito_studente
     try:
-        miei_appunti_db = supabase.table("appunti_salvati").select("id, titolo, materia, testo_estratto").eq("user_id", st.session_state.utente_loggato.id).order("created_at", desc=True).execute()
-        for ap in miei_appunti_db.data:
-            etichetta = f"📁 {ap['titolo']} | {ap['materia']}"
-            opzioni_esame[etichetta] = ap['testo_estratto']
+        miei_db = supabase.table("appunti_salvati").select("id, titolo, materia, testo_estratto").eq("user_id", st.session_state.utente_loggato.id).execute()
+        for ap in miei_db.data: opzioni_esame[f"📁 {ap['titolo']}"] = ap['testo_estratto']
     except: pass
 
-    if not opzioni_esame:
-        st.warning("⚠️ Non hai appunti pronti! Vai nella Fase 1.")
-    else:
-        scelta_esame = st.selectbox("📚 Argomento d'esame:", list(opzioni_esame.keys()), key="select_esame")
-        testo_da_studiare = opzioni_esame[scelta_esame]
-
-        if st.button("🔄 Inizia/Ricomincia Esame", type="secondary", use_container_width=True):
+    if opzioni_esame:
+        scelta_e = st.selectbox("Argomento esame:", list(opzioni_esame.keys()), key="sel_e")
+        if st.button("🔄 Reset Esame"):
             st.session_state.messaggi_chat = []
             st.rerun()
-            
-        st.divider()
-            
+
         for msg in st.session_state.messaggi_chat:
-            with st.chat_message(msg["ruolo"]):
-                st.markdown(msg["contenuto"])
-                
+            with st.chat_message(msg["ruolo"]): st.markdown(msg["contenuto"])
+
         if len(st.session_state.messaggi_chat) == 0:
-            with st.chat_message("assistant"):
-                saluto = f"Buongiorno. Oggi parliamo di: **{scelta_esame.split('|')[0]}**. Si accomodi e scriva 'Iniziamo' per la prima domanda."
-                st.markdown(saluto)
-                st.session_state.messaggi_chat.append({"ruolo": "assistant", "contenuto": saluto})
-        
-        if prompt_studente := st.chat_input("Risponda qui..."):
-            with st.chat_message("user"):
-                st.markdown(prompt_studente)
-            st.session_state.messaggi_chat.append({"ruolo": "user", "contenuto": prompt_studente})
+            msg_i = "Buongiorno. Mi dica tutto quello che sa. Scriva 'Iniziamo' se ha fegato."
+            st.session_state.messaggi_chat.append({"ruolo": "assistant", "contenuto": msg_i})
+            st.rerun()
+
+        if p_studente := st.chat_input("Rispondi..."):
+            st.session_state.messaggi_chat.append({"ruolo": "user", "contenuto": p_studente})
             
             with st.chat_message("assistant"):
-                with st.spinner("Il professore sta valutando..."):
+                with st.spinner("Il Prof. riflette..."):
+                    sys_p = f"""Sei un Prof. di Farmacia sarcastico (stile Dr. House). Testo: {opzioni_esame[scelta_e]}
+                    1. Valuta la risposta. Se corretta, sii ironico/simpatico (es. 'Miracolo! Hai risposto bene'). Se errata, sii cattivo.
+                    2. Scrivi SEMPRE 'VOTO: X' (1-30).
+                    3. Fai una nuova domanda.
+                    """
+                    r_prof = chat_professore_gemini(sys_p, st.session_state.messaggi_chat)
                     
-                    system_prompt = f"""Sei un professore di Farmacia dallo stile Dr. House: sarcastico e brillante. 
-Stai interrogando lo studente su: {testo_da_studiare}
-
-REGOLE DI RISPOSTA:
-1. Valuta la risposta dello studente.
-2. SE CORRETTA: Ironia simpatica/sorpresa.
-3. SE ERRATA: Sarcasmo severo.
-4. Scrivi SEMPRE su una riga nuova: "VOTO: X" (numero da 1 a 30).
-5. Dopo il voto, vai a capo e fai una NUOVA domanda specifica.
-6. Non superare le 100 parole totali."""
-                    
+                    # LOGICA VOTI E COLORI
+                    voto = 0
                     try:
-                        risposta_prof = chat_professore_gemini(system_prompt, st.session_state.messaggi_chat)
-                        
-                        voto = 0
-                        if "VOTO:" in risposta_prof:
-                            try:
-                                parte_voto = risposta_prof.split("VOTO:")[1].strip()
-                                numeri = "".join(filter(str.isdigit, parte_voto[:3]))
-                                voto = int(numeri)
-                            except: voto = 0
+                        voto = int(''.join(filter(str.isdigit, r_prof.split("VOTO:")[1][:3])))
+                    except: pass
+                    
+                    commento = r_prof.split("VOTO:")[0]
+                    nuova_d = r_prof.split(str(voto))[1] if str(voto) in r_prof else ""
 
-                        if voto > 0:
-                            parti = risposta_prof.split("VOTO:")
-                            commento = parti[0].strip()
-                            resto = parti[1].split(str(voto), 1)
-                            nuova_domanda = resto[1].strip() if len(resto) > 1 else ""
-                            
-                            st.markdown(commento)
-                            
-                            if voto <= 11:
-                                st.error(f"🔴 VOTO: {voto}/30 - Pessimo. Guardi meno Netflix e studi di più.")
-                            elif 12 <= voto <= 17:
-                                st.warning(f"🟡 VOTO: {voto}/30 - Insufficiente. Si sta scavando la fossa da solo.")
-                            else:
-                                st.success(f"🟢 VOTO: {voto}/30 - Notevole. Non si abitui a questi successi.")
-                            
-                            if nuova_domanda:
-                                st.markdown(f"--- \n**Prossima domanda:** \n{nuova_domanda}")
-                            
-                            # --- LA PAUSA TATTICA ---
-                            st.info("⌛ Il professore ti sta lasciando 5 secondi per riflettere sul voto...")
-                            time.sleep(5)
-                        else:
-                            st.markdown(risposta_prof)
+                    st.markdown(commento)
+                    if 1 <= voto <= 11: st.error(f"🔴 VOTO: {voto}/30 - Disastroso. Torni a casa.")
+                    elif 12 <= voto <= 17: st.warning(f"🟡 VOTO: {voto}/30 - Mediocre. Studi di più.")
+                    elif voto >= 18: st.success(f"🟢 VOTO: {voto}/30 - Sorprendente! Ma non si monti la testa.")
+                    st.markdown(f"**Prossima Domanda:** {nuova_d}")
+                    
+                    st.session_state.messaggi_chat.append({"ruolo": "assistant", "contenuto": r_prof})
+                    
+                    # PAUSA TATTICA DI 5 SECONDI
+                    st.info("⌛ Il Professore sta scrivendo sul libretto... (5s)")
+                    time.sleep(5)
+                    st.rerun()
 
-                        st.session_state.messaggi_chat.append({"ruolo": "assistant", "contenuto": risposta_prof})
-                        st.rerun() # Forza il refresh per pulire la barra dell'input
-                    except Exception as e:
-                        st.error(f"Il professore ha avuto un mancamento: {e}")
-with tab4:
     st.subheader("🧪 Arena di Farmacia")
 
     if "id_sfida_attiva" not in st.session_state:
