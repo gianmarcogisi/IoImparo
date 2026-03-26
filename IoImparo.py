@@ -15,6 +15,7 @@ import json
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from email.mime.application import MIMEApplication
 
 # --- 1. CONFIGURAZIONE PAGINA ---
 NOME_APP = "IoImparo 🎓"
@@ -74,7 +75,7 @@ def chat_professore_gemini(system_prompt, messaggi_chat):
     except Exception as e:
         raise e
 
-def invia_email_appunti(destinatario, titolo, materia, contenuto):
+def invia_email_appunti(destinatario, titolo, materia, contenuto, pdf_b64=None):
     try:
         mittente = st.secrets.get("EMAIL_SENDER", "")
         password = st.secrets.get("EMAIL_PASSWORD", "")
@@ -86,7 +87,16 @@ def invia_email_appunti(destinatario, titolo, materia, contenuto):
         msg['To'] = destinatario
         msg['Subject'] = f"🎓 IoImparo - Appunti di {materia}: {titolo}"
         
-        corpo_email = f"Ciao!\n\nEcco gli appunti di {materia} che hai richiesto dalla Community di IoImparo.\n\nTitolo: {titolo}\n\n---\n\n{contenuto}\n\n---\nBuono studio!"
+        # Se c'è un file originale, inviamo quello!
+        if pdf_b64:
+            pdf_bytes = base64.b64decode(pdf_b64)
+            part = MIMEApplication(pdf_bytes, Name=f"{titolo}_Originale.pdf")
+            part['Content-Disposition'] = f'attachment; filename="{titolo}_Originale.pdf"'
+            msg.attach(part)
+            corpo_email = f"Ciao!\n\nUno studente ha condiviso un file con te dalla Community di IoImparo.\n\nMateria: {materia}\nTitolo: {titolo}\n\nTroverai il documento originale in allegato a questa email.\n\nBuono studio!"
+        else:
+            corpo_email = f"Ciao!\n\nEcco gli appunti di {materia} che hai richiesto...\n\nTitolo: {titolo}\n\n---\n\n{contenuto}\n\n---\nBuono studio!"
+            
         msg.attach(MIMEText(corpo_email, 'plain', 'utf-8'))
         
         server = smtplib.SMTP('smtp.gmail.com', 587)
@@ -283,13 +293,15 @@ Dividi la risposta ESATTAMENTE usando questi tag:
 
 [SCHEMA]
 Genera ESCLUSIVAMENTE codice Mermaid.js valido (formato graph TD).
-REGOLE TASSATIVE ANTI-CRASH (SE SBAGLI IL GRAFICO SARÀ BIANCO):
-1. Sviluppa in VERTICALE. Max 2 frecce per nodo padre.
-2. Usa questa sintassi esatta: A["Titolo: breve spiegazione"] --> B["Titolo: breve spiegazione"]
-3. VIETATO ANDARE A CAPO all'interno delle parentesi quadre ["..."]. Il testo della descrizione deve stare tutto su una singola riga!
-4. VIETATO usare altre virgolette doppie ("), apici (') o parentesi tonde dentro le descrizioni. Usa solo testo semplice.
-5. Vai a capo SOLO dopo aver completato l'intero collegamento della freccia.
-6. Impersoni un professore di Farmacia Severo ma simpatico.
+REGOLE TASSATIVE (PENA IL FALLIMENTO DEL SISTEMA):
+1. MAX 15 NODI totali. Sii estremamente sintetico, estrai solo i concetti chiave.
+2. DEVI ANDARE A CAPO dopo ogni singolo collegamento. Vietato mettere due frecce sulla stessa riga!
+3. ESEMPIO DI FORMATO OBBLIGATORIO:
+graph TD
+A["Padre"] --> B["Figlio 1"]
+A["Padre"] --> C["Figlio 2"]
+4. Sviluppa in VERTICALE (graph TD). Max 2 frecce per nodo padre.
+5. VIETATO usare virgolette doppie, apici o parentesi tonde all'interno delle descrizioni ["..."].
 [/SCHEMA]
 
 [RIASSUNTO]
@@ -301,6 +313,11 @@ Scrivi un riassunto discorsivo, chiaro, con le parole chiave in grassetto.
                         else:
                             reader = PyPDF2.PdfReader(file_input)
                             contenuti.append("".join([page.extract_text() for page in reader.pages]))
+
+                        pdf_b64_to_save = None
+                        if not is_foto:
+                            file_input.seek(0) # Riportiamo il file all'inizio
+                            pdf_b64_to_save = base64.b64encode(file_input.read()).decode('utf-8')
 
                         # CHIAMATA A GEMINI
                         response = client.models.generate_content(model='gemini-2.5-flash', contents=contenuti)
@@ -372,13 +389,20 @@ Scrivi un riassunto discorsivo, chiaro, con le parole chiave in grassetto.
 
                         # SALVATAGGIO NEL DATABASE
                         try:
-                            supabase.table("appunti_salvati").insert({
+                            dati_db = {
                                 "user_id": st.session_state.utente_loggato.id,
                                 "testo_estratto": st.session_state.testo_pulito_studente,
-                                "is_public": is_public, "titolo": titolo_appunto, "materia": materia_appunto
-                            }).execute()
-                            st.toast("✅ Appunti salvati!", icon="💾")
-                        except: pass
+                                "is_public": is_public, 
+                                "titolo": titolo_appunto, 
+                                "materia": materia_appunto
+                            }
+                            if pdf_b64_to_save:
+                                dati_db["file_pdf_base64"] = pdf_b64_to_save # Salviamo l'allegato!
+                                
+                            supabase.table("appunti_salvati").insert(dati_db).execute()
+                            st.toast("✅ Appunti e file salvati!", icon="💾")
+                        except Exception as db_err:
+                            st.error(f"Errore DB: {db_err}")
                         
                         st.balloons()
 
@@ -954,7 +978,7 @@ with tab6:
                         if st.button("Invia Email ✉️", key=f"btn_mail_{ap['id']}", use_container_width=True):
                             if email_destinatario:
                                 with st.spinner("Invio in corso..."):
-                                    esito = invia_email_appunti(email_destinatario, ap['titolo'], ap['materia'], ap['testo_estratto'])
+                                    esito = invia_email_appunti(email_destinatario, ap['titolo'], ap['materia'], ap['testo_estratto'], ap.get('file_pdf_base64'))
                                     if esito:
                                         st.success("Inviato! Controlla la posta.")
                                     else:
@@ -993,14 +1017,25 @@ with tab7:
                 
                 st.divider()
                 
-                # 3. Bottone per scaricare al volo il PDF
-                pdf_bytes = genera_pdf_scaricabile(t_trasc, t_schem, t_riass)
-                st.download_button(
-                    label="📩 Scarica PDF Completo", 
-                    data=pdf_bytes, 
-                    file_name=f"{ap['titolo'].replace(' ', '_')}.pdf", 
-                    mime="application/pdf", 
-                    key=f"dl_privato_{ap['id']}"
-                )
+                # 3. Bottone per scaricare: Originale se esiste, altrimenti generato
+                if ap.get('file_pdf_base64'):
+                    st.download_button(
+                        label="📩 Scarica File Originale (PDF)", 
+                        data=base64.b64decode(ap['file_pdf_base64']), 
+                        file_name=f"{ap['titolo'].replace(' ', '_')}_Originale.pdf", 
+                        mime="application/pdf", 
+                        key=f"dl_privato_{ap['id']}"
+                    )
+                else:
+                    pdf_bytes = genera_pdf_scaricabile(t_trasc, t_schem, t_riass)
+                    st.download_button(
+                        label="📩 Scarica Appunti Elaborati (PDF)", 
+                        data=pdf_bytes, 
+                        file_name=f"{ap['titolo'].replace(' ', '_')}.pdf", 
+                        mime="application/pdf", 
+                        key=f"dl_privato_{ap['id']}"
+                    )
     else:
         st.info("Il tuo archivio privato è ancora vuoto. Elabora un PDF nella Fase 1 e salvalo come Privato!")
+
+
