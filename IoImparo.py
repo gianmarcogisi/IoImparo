@@ -180,10 +180,11 @@ with tab1:
         is_foto = (tipo_file == "📸 Foto")
         file_input = st.file_uploader(
             "Scegli file (Max 150 foto)" if is_foto else "Scegli file (Max 1 PDF)", 
-            type=['png', 'jpg', 'jpeg'] if is_foto else ['pdf'], 
+            # AGGIUNGIAMO .webp e .heic alla lista dei permessi
+            type=['png', 'jpg', 'jpeg', 'webp', 'heic'] if is_foto else ['pdf'], 
             accept_multiple_files=is_foto, 
-            # AGGIUNGA tipo_file alla chiave per forzare il refresh del widget su mobile
-            key=f"file_up_{tipo_file}" 
+            # Cambiamo la chiave dinamicamente per forzare il browser a resettare il widget
+            key=f"uploader_{tipo_file}" 
         )
         
         troppe_foto = False
@@ -1081,8 +1082,6 @@ with tab7:
                     )
     else:
         st.info("Il tuo archivio privato è ancora vuoto. Elabora un PDF nella Fase 1 e salvalo come Privato!")
-
-
 
 
 
