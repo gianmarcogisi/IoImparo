@@ -487,6 +487,10 @@ Testo da usare: """ + testo_f2
 with tab3:
     st.subheader("🧑‍🏫 Simulazione Esame Orale")
     
+    # --- VARIABILI PER LA CATTIVERIA DEL PROF ---
+    if "errori_totali" not in st.session_state: st.session_state.errori_totali = 0
+    if "esame_bocciato" not in st.session_state: st.session_state.esame_bocciato = False
+
     opzioni_esame = {}
     if st.session_state.testo_pulito_studente:
         opzioni_esame["✨ Appunti Fase 1"] = st.session_state.testo_pulito_studente
@@ -497,8 +501,12 @@ with tab3:
 
     if opzioni_esame:
         scelta_e = st.selectbox("Argomento esame:", list(opzioni_esame.keys()), key="sel_e")
+        
+        # RESET AZZERA ANCHE I CONTATORI DI BOCCIATURA
         if st.button("🔄 Reset Esame"):
             st.session_state.messaggi_chat = []
+            st.session_state.errori_totali = 0
+            st.session_state.esame_bocciato = False
             st.rerun()
 
         for msg in st.session_state.messaggi_chat:
@@ -509,39 +517,71 @@ with tab3:
             st.session_state.messaggi_chat.append({"ruolo": "assistant", "contenuto": msg_i})
             st.rerun()
 
-        if p_studente := st.chat_input("Rispondi..."):
-            st.session_state.messaggi_chat.append({"ruolo": "user", "contenuto": p_studente})
-            
-            with st.chat_message("assistant"):
-                with st.spinner("Il Prof. riflette..."):
-                    sys_p = f"""Sei un Prof. di Farmacia sarcastico (stile Dr. House). Testo: {opzioni_esame[scelta_e]}
-                    1. Valuta la risposta. Se corretta, sii ironico/simpatico (es. 'Miracolo! Hai risposto bene'). Se errata, sii cattivo.
-                    2. Scrivi SEMPRE 'VOTO: X' (1-30).
-                    3. Fai una nuova domanda.
-                    """
-                    r_prof = chat_professore_gemini(sys_p, st.session_state.messaggi_chat)
-                    
-                    # LOGICA VOTI E COLORI
-                    voto = 0
-                    try:
-                        voto = int(''.join(filter(str.isdigit, r_prof.split("VOTO:")[1][:3])))
-                    except: pass
-                    
-                    commento = r_prof.split("VOTO:")[0]
-                    nuova_d = r_prof.split(str(voto))[1] if str(voto) in r_prof else ""
+        # SE NON SEI ANCORA STATO CACCIATO DALL'AULA...
+        if not st.session_state.esame_bocciato:
+            if p_studente := st.chat_input("Rispondi... (Il libretto non dimentica)"):
+                st.session_state.messaggi_chat.append({"ruolo": "user", "contenuto": p_studente})
+                
+                with st.chat_message("assistant"):
+                    with st.spinner("Il Prof. annota le tue mancanze..."):
+                        
+                        # PROMPT SPIETATO E MEMORIA DI FERRO
+                        sys_p = f"""Sei un Prof. di Farmacia universitario spietato (stile Dr. House). Testo: {opzioni_esame[scelta_e]}
+                        1. Valuta la risposta. Se corretta, sii ironico. Se errata, sii cinico e cattivo.
+                        2. Scrivi SEMPRE 'VOTO: X' (1-30).
+                        3. Fai una nuova domanda.
+                        4. NON SEMPLIFICARE MAI LE DOMANDE. Se lo studente sbaglia, colpisci più duro con una domanda ancora più difficile e specifica. Nessuna pietà.
+                        """
+                        r_prof = chat_professore_gemini(sys_p, st.session_state.messaggi_chat)
+                        
+                        # LOGICA VOTI E BOCCIATURA AD ACCUMULO
+                        voto = 0
+                        try:
+                            voto = int(''.join(filter(str.isdigit, r_prof.split("VOTO:")[1][:3])))
+                        except: pass
+                        
+                        if voto > 0:
+                            # SE SBAGLI, L'ERRORE SI ACCUMULA. SE INDOVINI, NON SI AZZERA!
+                            if voto < 18:
+                                st.session_state.errori_totali += 1
+                            
+                            # CONTROLLO BOCCIATURA (LIMITE: 4 ERRORI TOTALI)
+                            if st.session_state.errori_totali >= 4:
+                                st.session_state.esame_bocciato = True
+                                msg_bocciato = f"🔴 VOTO: {voto}/30. Quarto errore totale. La sua preparazione fa acqua da tutte le parti. Prenda il suo libretto, è **BOCCIATO**. E chiuda la porta uscendo!"
+                                st.error(msg_bocciato)
+                                st.session_state.messaggi_chat.append({"ruolo": "assistant", "contenuto": msg_bocciato})
+                                time.sleep(4)
+                                st.rerun()
+                            
+                            else:
+                                # CONTINUA L'ESAME NORMALE
+                                commento = r_prof.split("VOTO:")[0]
+                                nuova_d = r_prof.split(str(voto))[1] if str(voto) in r_prof else ""
 
-                    st.markdown(commento)
-                    if 1 <= voto <= 11: st.error(f"🔴 VOTO: {voto}/30 - Disastroso. Torni a casa.")
-                    elif 12 <= voto <= 17: st.warning(f"🟡 VOTO: {voto}/30 - Mediocre. Studi di più.")
-                    elif voto >= 18: st.success(f"🟢 VOTO: {voto}/30 - Sorprendente! Ma non si monti la testa.")
-                    st.markdown(f"**Prossima Domanda:** {nuova_d}")
-                    
-                    st.session_state.messaggi_chat.append({"ruolo": "assistant", "contenuto": r_prof})
-                    
-                    # PAUSA TATTICA DI 5 SECONDI
-                    st.info("⌛ Il Professore sta scrivendo sul libretto... (5s)")
-                    time.sleep(5)
-                    st.rerun()
+                                st.markdown(commento)
+                                if 1 <= voto <= 11: 
+                                    st.error(f"🔴 VOTO: {voto}/30 - Disastroso. (Errori accumulati: {st.session_state.errori_totali}/4)")
+                                elif 12 <= voto <= 17: 
+                                    st.warning(f"🟡 VOTO: {voto}/30 - Mediocre. (Errori accumulati: {st.session_state.errori_totali}/4)")
+                                elif voto >= 18: 
+                                    # Ti fa i complimenti, ma ti ricorda che sei sul filo del rasoio se hai errori
+                                    st.success(f"🟢 VOTO: {voto}/30 - Accettabile. Ma il libretto ricorda le sue lacune. (Errori accumulati: {st.session_state.errori_totali}/4)")
+                                
+                                st.markdown(f"**Prossima Domanda:** {nuova_d}")
+                                st.session_state.messaggi_chat.append({"ruolo": "assistant", "contenuto": r_prof})
+                                
+                                # PAUSA TATTICA DI 5 SECONDI
+                                st.info("⌛ Il Professore ti scruta in silenzio... (5s)")
+                                time.sleep(5)
+                                st.rerun()
+                        else:
+                            st.markdown(r_prof)
+                            st.session_state.messaggi_chat.append({"ruolo": "assistant", "contenuto": r_prof})
+                            st.rerun()
+        else:
+            # SCHERMATA DI BOCCIATURA
+            st.error("❌ ESAME FALLITO. Il professore ti ha bocciato. Ripresentati al prossimo appello (Premi 'Reset Esame').")
 
 # --- FASE 4 DEVE STARE TUTTO A SINISTRA (ZERO SPAZI) ---
 with tab4:
@@ -952,5 +992,3 @@ with tab7:
                 )
     else:
         st.info("Il tuo archivio privato è ancora vuoto. Elabora un PDF nella Fase 1 e salvalo come Privato!")
-
-
