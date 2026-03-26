@@ -254,7 +254,8 @@ with tab1:
                     st.stop()
                 st.session_state.ultimo_utilizzo = time.time()
 
-                try:
+                with st.spinner("🧠 Il Prof. Gemini sta analizzando i tuoi appunti... (Questa operazione richiede qualche secondo)"):
+                    try:
                         # 1. IL PROMPT BLINDATO PER I GRAFICI
                         contenuti = ["""Agisci come il miglior assistente universitario del mondo. 
 Dividi la tua risposta ESATTAMENTE usando questi tag speciali (non usare nient'altro per dividere le sezioni):
@@ -300,7 +301,7 @@ REGOLE CRITICHE PER NON FAR CRASHARE IL SISTEMA:
                         st.markdown("### 📝 Trascrizione")
                         st.write(trascrizione if trascrizione else "Documento elaborato.")
 
-                        # Mostra Schema Grafico (ORA USIAMO IL SISTEMA NATIVO DI STREAMLIT!)
+                        # Mostra Schema Grafico (SISTEMA NATIVO DI STREAMLIT)
                         st.markdown("### 🖼️ Schema Concettuale Visivo")
                         if codice_mermaid and ("graph" in codice_mermaid or "mindmap" in codice_mermaid or "flowchart" in codice_mermaid):
                             # Puliamo eventuali errori di markdown di Gemini
@@ -339,12 +340,12 @@ REGOLE CRITICHE PER NON FAR CRASHARE IL SISTEMA:
                                     supabase.table("appunti_salvati").delete().eq("id", old_id).execute()
                                 st.toast(f"🧹 Spazio ottimizzato: vecchi appunti eliminati!", icon="♻️")
                                     
-                        except Exception as e: 
-                            st.error(f"Errore DB: {e}")
+                        except Exception as db_e: 
+                            st.error(f"Errore DB: {db_e}")
                         
                         st.balloons()
                         
-                        except Exception as e:
+                    except Exception as e:
                         if "503" in str(e): st.warning("⏳ Server Google intasati. Riprova tra poco!")
                         else: st.error(f"Errore Gemini: {e}")
         
