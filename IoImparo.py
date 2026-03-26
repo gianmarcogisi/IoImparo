@@ -488,7 +488,7 @@ Scrivi un riassunto discorsivo, chiaro, con le parole chiave in grassetto.
                         except Exception as db_e: 
                             st.error(f"Errore DB: {db_e}")
                         
-                        st.balloons()
+                       st.balloons()
                         
                     except Exception as e:
                         if "503" in str(e): 
@@ -496,9 +496,10 @@ Scrivi un riassunto discorsivo, chiaro, con le parole chiave in grassetto.
                         else: 
                             st.error(f"Errore Gemini: {e}")
 
-        # --- IL TASTO DOWNLOAD VA QUI (FUORI DAI BLOCCHI SOPRA MA DENTRO COL2) ---
+        # --- IL TASTO DOWNLOAD (ALLINEATO A "if bottone_elabora") ---
         if st.session_state.riassunto_pdf:
-           st.download_button(
+            st.write("---")
+            st.download_button(
                 label="📩 Scarica PDF Completo", 
                 data=st.session_state.riassunto_pdf, 
                 file_name="riassunto_ioimparo.pdf", 
@@ -506,7 +507,7 @@ Scrivi un riassunto discorsivo, chiaro, con le parole chiave in grassetto.
                 use_container_width=True
             )
 
-with tab2:
+with tab2: 
     st.subheader("⚡ Flashcard Visive & Dinamiche")
     
     # Inizializzazione variabili di memoria per le carte
