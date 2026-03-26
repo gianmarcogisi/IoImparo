@@ -331,38 +331,76 @@ Scrivi un riassunto discorsivo, chiaro, con le parole chiave in grassetto.
                         if codice_mermaid and "graph" in codice_mermaid:
                             codice_mermaid = codice_mermaid.replace("```mermaid", "").replace("```", "").strip()
                             
-                            # NUOVO CODICE HTML CON LIBRERIA PAN-ZOOM
+                            # NUOVO CODICE HTML CON MOTORE ZOOM E TASTO DOWNLOAD PER STAMPA
                             html_code = f"""
-                            <div style="width: 100%; height: 600px; background: white; border-radius: 10px; border: 1px solid #ccc; position: relative;">
-                                <div class="mermaid" id="graphDiv" style="width: 100%; height: 100%;">
-                                {codice_mermaid}
+                            <div id="wrapper" style="width: 100%; background: white; border-radius: 10px; border: 1px solid #ccc; position: relative; font-family: sans-serif;">
+                                <button onclick="downloadSVG()" style="position: absolute; top: 10px; left: 10px; z-index: 100; padding: 8px 12px; background: #4F46E5; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">
+                                    💾 Scarica per Stampa (PNG)
+                                </button>
+                                
+                                <div id="graphDiv" style="width: 100%; height: 600px;">
+                                    {codice_mermaid}
                                 </div>
                             </div>
+
                             <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
                             <script src="https://cdn.jsdelivr.net/npm/svg-pan-zoom@3.6.1/dist/svg-pan-zoom.min.js"></script>
+                            
                             <script>
                                 mermaid.initialize({{ startOnLoad: true, theme: 'base' }});
                                 
-                                // Aspettiamo che Mermaid disegni, poi accendiamo il motore di Zoom
                                 setTimeout(function() {{
                                     var svgElement = document.querySelector('#graphDiv svg');
                                     if(svgElement) {{
                                         svgElement.style.width = '100%';
                                         svgElement.style.height = '100%';
                                         svgElement.style.maxWidth = 'none';
-                                        svgPanZoom(svgElement, {{
+                                        
+                                        // Attiva Zoom e Pan
+                                        window.panZoom = svgPanZoom(svgElement, {{
                                             zoomEnabled: true,
-                                            controlIconsEnabled: true, // Aggiunge i bottoni + e -
+                                            controlIconsEnabled: true,
                                             fit: true,
-                                            center: true,
-                                            minZoom: 0.5,
-                                            maxZoom: 10
+                                            center: true
                                         }});
                                     }}
                                 }}, 1500);
+
+                                // FUNZIONE MAGICA PER TRASFORMARE LO SCHEMA IN IMMAGINE STAMPABILE
+                                function downloadSVG() {{
+                                    var svg = document.querySelector('#graphDiv svg');
+                                    var serializer = new XMLSerializer();
+                                    var source = serializer.serializeToString(svg);
+                                    
+                                    var canvas = document.createElement('canvas');
+                                    var bbox = svg.getBBox();
+                                    canvas.width = bbox.width * 2; // Raddoppiamo la qualità
+                                    canvas.height = bbox.height * 2;
+                                    
+                                    var context = canvas.getContext('2d');
+                                    var img = new Image();
+                                    var svgBlob = new Blob([source], {{type: 'image/svg+xml;charset=utf-8'}});
+                                    var url = URL.createObjectURL(svgBlob);
+                                    
+                                    img.onload = function() {{
+                                        context.fillStyle = "white"; // Sfondo bianco per la stampa
+                                        context.fillRect(0, 0, canvas.width, canvas.height);
+                                        context.drawImage(img, 0, 0, canvas.width, canvas.height);
+                                        URL.revokeObjectURL(url);
+                                        
+                                        var pngUrl = canvas.toDataURL("image/png");
+                                        var downloadLink = document.createElement("a");
+                                        downloadLink.href = pngUrl;
+                                        downloadLink.download = "Schema_Concettuale_IoImparo.png";
+                                        document.body.appendChild(downloadLink);
+                                        downloadLink.click();
+                                        document.body.removeChild(downloadLink);
+                                    }};
+                                    img.src = url;
+                                }}
                             </script>
                             """
-                            st.components.v1.html(html_code, height=650) 
+                            st.components.v1.html(html_code, height=650)
                         else:
                             st.warning("⚠️ L'IA non è riuscita a trovare uno schema per questo testo.")
 
