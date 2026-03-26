@@ -231,28 +231,32 @@ with tab1:
 
     with col2:
         st.subheader("📄 Risultato")
+        
         file_valido = len(file_input) > 0 if is_foto and file_input is not None else file_input is not None
         
-        if bottone_elabora and file_valido:
-            if is_foto:
-                dimensione_totale = sum([f.size for f in file_input])
-                if dimensione_totale > 150 * 1024 * 1024: 
-                    st.error("🚨 Le foto pesano troppo in totale. Max 150 MB.")
-                    st.stop()
+        if bottone_elabora:
+            if not file_valido:
+                st.error("⚠️ Devi prima caricare un file (PDF o Foto) nel riquadro a sinistra!")
             else:
-                if file_input.size > 15 * 1024 * 1024: 
-                    st.error("🚨 PDF troppo grande. Max 15 MB.")
+                if is_foto:
+                    dimensione_totale = sum([f.size for f in file_input])
+                    if dimensione_totale > 150 * 1024 * 1024: 
+                        st.error("🚨 Le foto pesano troppo in totale. Max 150 MB.")
+                        st.stop()
+                else:
+                    if file_input.size > 15 * 1024 * 1024: 
+                        st.error("🚨 PDF troppo grande. Max 15 MB.")
+                        st.stop()
+
+                if "ultimo_utilizzo" not in st.session_state: st.session_state.ultimo_utilizzo = 0
+                if time.time() - st.session_state.ultimo_utilizzo < 30:
+                    st.warning("⏱️ Sistema in raffreddamento. Attendi 30 secondi tra un caricamento e l'altro.")
                     st.stop()
+                st.session_state.ultimo_utilizzo = time.time()
 
-            if "ultimo_utilizzo" not in st.session_state: st.session_state.ultimo_utilizzo = 0
-            if time.time() - st.session_state.ultimo_utilizzo < 30:
-                st.warning("⏱️ Attendi 30 secondi tra un caricamento e l'altro.")
-                st.stop()
-            st.session_state.ultimo_utilizzo = time.time()
-
-            with st.spinner("🧠 Il Prof. Gemini sta analizzando i tuoi appunti... (Questa operazione richiede qualche secondo)"):
+                with st.spinner("🧠 Il Prof. Gemini sta analizzando i tuoi appunti... (Questa operazione richiede qualche secondo)"):
                     try:
-                        # 1. IL NUOVO PROMPT A PROVA DI BOMBA CON I TAG
+                        # 1. IL PROMPT A PROVA DI BOMBA CON I TAG
                         contenuti = ["""Agisci come il miglior assistente universitario del mondo. 
 Dividi la tua risposta ESATTAMENTE usando questi tag speciali (non usare nient'altro per dividere le sezioni):
 
@@ -286,7 +290,7 @@ Dividi la tua risposta ESATTAMENTE usando questi tag speciali (non usare nient'a
                             codice_mermaid = testo_gemini.split("[SCHEMA]")[1].split("[/SCHEMA]")[0].strip()
                             riassunto = testo_gemini.split("[RIASSUNTO]")[1].split("[/RIASSUNTO]")[0].strip()
                         except:
-                            trascrizione, codice_mermaid, riassunto = "", "", testo_gemini # Fallback
+                            trascrizione, codice_mermaid, riassunto = "", "", testo_gemini # Fallback di emergenza
 
                         # Mostra Trascrizione
                         st.markdown("### 📝 Trascrizione")
@@ -312,20 +316,19 @@ Dividi la tua risposta ESATTAMENTE usando questi tag speciali (non usare nient'a
                         st.markdown("### 📖 Riassunto Completo")
                         st.markdown(riassunto)
 
-                        # --- 3. IL BUG FIX DEL DATABASE ---
+                        # --- 3. IL SALVATAGGIO NEL DATABASE ---
                         try:
                             supabase.table("appunti_salvati").insert({
                                 "user_id": st.session_state.utente_loggato.id,
                                 "testo_estratto": st.session_state.testo_pulito_studente,
                                 "is_public": is_public,
-                                "titolo": titolo_appunto,   # <--- ORA SALVA IL TITOLO VERO!
-                                "materia": materia_appunto  # <--- ORA SALVA LA MATERIA VERA!
+                                "titolo": titolo_appunto,
+                                "materia": materia_appunto
                             }).execute()
                             
                             if is_public: st.toast("🌍 Salvato e condiviso con la Community!", icon="✅")
                             else: st.toast("🔒 Salvato nel tuo archivio privato!", icon="✅")
                             
-                            # --- SISTEMA DI RIMOZIONE CRONOLOGICA (> 25) ---
                             MAX_APPUNTI_MEMORIA = 25 
                             res_storico = supabase.table("appunti_salvati").select("id").eq("user_id", st.session_state.utente_loggato.id).eq("is_public", False).order("created_at").execute()
                             
@@ -344,55 +347,6 @@ Dividi la tua risposta ESATTAMENTE usando questi tag speciali (non usare nient'a
                     except Exception as e:
                         if "503" in str(e): st.warning("⏳ Server Google intasati. Riprova tra poco!")
                         else: st.error(f"Errore Gemini: {e}")
-                    
-                    # --- GESTIONE INTELLIGENTE OUTPUT (GRAFICO + TESTO) ---
-                    text_output = response.text
-
-                    # Separazione logica delle sezioni basata sui separatori del prompt
-                    try:
-                        parti = text_output.split("---")
-                        # parti[0] è vuoto perché il testo inizia con ---
-                        trascrizione = parti[1].replace("SEZIONE 1: TRASCRIZIONE", "").replace("---", "").strip()
-                        codice_mermaid = parti[2].replace("SEZIONE 2: SCHEMA CONCETTUALE GRAFICO (Mermaid.js)", "").replace("---", "").strip()
-                        riassunto = parti[3].replace("SEZIONE 3: RIASSUNTO COMPLETO", "").replace("---", "").strip()
-                    except:
-                        # Fallback di sicurezza se Gemini sbaglia i trattini
-                        trascrizione, codice_mermaid, riassunto = "", "", text_output
-
-                    # 1. Visualizzazione Trascrizione
-                    st.markdown("### 📝 Trascrizione")
-                    st.write(trascrizione if trascrizione else "Documento digitale riconosciuto.")
-
-                    # 2. Visualizzazione Grafica (Mermaid.js)
-                    st.markdown("### 🖼️ Schema Concettuale Visivo")
-                    
-                    if codice_mermaid and ("graph" in codice_mermaid or "mindmap" in codice_mermaid or "flowchart" in codice_mermaid):
-                        # Pulisci eventuale markdown extra di Gemini
-                        codice_mermaid = codice_mermaid.replace("```mermaid", "").replace("```", "").strip()
-                        
-                        html_code = f"""
-                        <div class="mermaid" style="display: flex; justify-content: center; background: white; border-radius: 10px; padding: 20px;">
-                        {codice_mermaid}
-                        </div>
-                        <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
-                        <script>
-                            mermaid.initialize({{ startOnLoad: true, theme: 'base', themeVariables: {{ 'primaryColor': '#4F46E5', 'primaryTextColor': '#fff', 'lineColor': '#4F46E5' }}}});
-                        </script>
-                        """
-                        st.components.v1.html(html_code, height=600, scrolling=True)
-                    else:
-                        st.warning("⚠️ Impossibile generare uno schema grafico per questo materiale.")
-                        st.info(codice_mermaid if codice_mermaid else "Nessuno schema generato.")
-
-                    # 3. Visualizzazione Riassunto
-                    st.markdown("### 📖 Riassunto Completo")
-                    st.markdown(riassunto)
-                    
-                    st.balloons()
-                            
-except Exception as e:
-                    if "503" in str(e): st.warning("⏳ Server Google intasati. Riprova tra poco!")
-                    else: st.error(f"Errore: {e}")
         
         if st.session_state.riassunto_pdf:
             st.download_button("📩 Scarica PDF", data=st.session_state.riassunto_pdf, file_name="riassunto.pdf", mime="application/pdf")
