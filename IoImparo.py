@@ -496,16 +496,16 @@ Scrivi un riassunto discorsivo, chiaro, con le parole chiave in grassetto.
                         else: 
                             st.error(f"Errore Gemini: {e}")
 
-        # --- IL TASTO DOWNLOAD (ALLINEATO A "if bottone_elabora") ---
-        if st.session_state.riassunto_pdf:
-            st.write("---")
-            st.download_button(
-                label="📩 Scarica PDF Completo", 
-                data=st.session_state.riassunto_pdf, 
-                file_name="riassunto_ioimparo.pdf", 
-                mime="application/pdf",
-                use_container_width=True
-            )
+                # --- ORA IL TASTO DOWNLOAD (ALLINEATO AL BORDO DELLA COLONNA) ---
+                if st.session_state.riassunto_pdf:
+                    st.write("---")
+                    st.download_button(
+                        label="📩 Scarica PDF Completo", 
+                        data=st.session_state.riassunto_pdf, 
+                        file_name="riassunto_ioimparo.pdf", 
+                        mime="application/pdf",
+                        use_container_width=True
+                    )
 
 with tab2: 
     st.subheader("⚡ Flashcard Visive & Dinamiche")
