@@ -534,80 +534,99 @@ TESTO DEGLI APPUNTI:
               
 with tab3:
     st.subheader("🧑‍🏫 Simulazione Esame Orale")
-    st.write("Scegli un argomento e mettiti alla prova! Il Prof. Gemini ti interrogherà per testare la tua preparazione.")
+    st.write("Scegli un argomento e preparati alla sferzata del Prof!")
     
-    # --- LOGICA DI RECUPERO ARGOMENTI (Come in Fase 2) ---
+    # --- LOGICA DI RECUPERO ARGOMENTI ---
     opzioni_esame = {}
-    
-    # 1. Appunti attuali
     if st.session_state.testo_pulito_studente:
         opzioni_esame["✨ Appunti appena elaborati in Fase 1"] = st.session_state.testo_pulito_studente
-        
-    # 2. Archivio dal Database
     try:
         miei_appunti_db = supabase.table("appunti_salvati").select("id, titolo, materia, testo_estratto").eq("user_id", st.session_state.utente_loggato.id).order("created_at", desc=True).execute()
         for ap in miei_appunti_db.data:
             etichetta = f"📁 {ap['titolo']} | {ap['materia']}"
             opzioni_esame[etichetta] = ap['testo_estratto']
-    except:
-        pass
+    except: pass
 
     if not opzioni_esame:
-        st.warning("⚠️ Non hai appunti pronti! Vai nella Fase 1 per elaborarne uno o controlla il tuo Archivio Privato.")
+        st.warning("⚠️ Non hai appunti pronti! Vai nella Fase 1.")
     else:
-        # MENU DI SELEZIONE ARGOMENTO
-        scelta_esame = st.selectbox("📚 Su quale argomento vuoi essere interrogato?", list(opzioni_esame.keys()), key="select_esame")
+        scelta_esame = st.selectbox("📚 Argomento d'esame:", list(opzioni_esame.keys()), key="select_esame")
         testo_da_studiare = opzioni_esame[scelta_esame]
 
-        # Tasto per azzerare l'interrogazione (indispensabile se si cambia argomento)
         if st.button("🔄 Inizia/Ricomincia Esame", type="secondary", use_container_width=True):
             st.session_state.messaggi_chat = []
             st.rerun()
             
         st.divider()
             
-        # 1. Mostra la cronologia della conversazione
         for msg in st.session_state.messaggi_chat:
             with st.chat_message(msg["ruolo"]):
                 st.markdown(msg["contenuto"])
                 
-        # 2. Se la chat è vuota, il Prof fa la prima mossa
         if len(st.session_state.messaggi_chat) == 0:
             with st.chat_message("assistant"):
-                nome_argomento = scelta_esame.split("|")[0].replace("📁 ", "").replace("✨ ", "")
-                saluto = f"Buongiorno! Sono pronto per l'esame su: **{nome_argomento}**. Quando vuoi iniziare, scrivimi 'Iniziamo' o rispondi alla mia prima domanda!"
+                saluto = f"Buongiorno. Oggi parliamo di: **{scelta_esame.split('|')[0]}**. Si accomodi e scriva 'Iniziamo' per la prima domanda."
                 st.markdown(saluto)
                 st.session_state.messaggi_chat.append({"ruolo": "assistant", "contenuto": saluto})
         
-        # 3. Input dello studente
-        if prompt_studente := st.chat_input("Rispondi al professore..."):
-            
+        if prompt_studente := st.chat_input("Risponda qui..."):
             with st.chat_message("user"):
                 st.markdown(prompt_studente)
             st.session_state.messaggi_chat.append({"ruolo": "user", "contenuto": prompt_studente})
             
-            # 4. Risposta del Professore basata sul TESTO SELEZIONATO
             with st.chat_message("assistant"):
-                with st.spinner("Il professore valuta la tua risposta..."):
+                with st.spinner("Il professore sta valutando..."):
                     
-                    system_prompt = f"""Sei un professore universitario esperto. 
-Stai interrogando lo studente esclusivamente su questo materiale: 
-{testo_da_studiare}
+                    system_prompt = f"""Sei un professore di Farmacia dallo stile Dr. House: sarcastico e brillante. 
+Stai interrogando lo studente su: {testo_da_studiare}
 
-Regole ferree della simulazione:
-1. Fai UNA SOLA domanda alla volta. Non fare elenchi di domande.
-2. Aspetta la risposta dello studente prima di proseguire.
-3. Valuta la sua risposta: se è giusta fagli i complimenti, se è sbagliata correggilo spiegando il perché.
-4. Subito dopo il feedback, fagli un'altra domanda su un argomento diverso dello stesso testo.
-5. Impersoni un professore di Farmacia Severo ma simpatico.
-6. Usa un tono accademico, professionale ma empatico."""
+REGOLE DI RISPOSTA:
+1. Valuta la risposta dello studente.
+2. SE CORRETTA: Ironia simpatica/sorpresa.
+3. SE ERRATA: Sarcasmo severo.
+4. Scrivi SEMPRE su una riga nuova: "VOTO: X" (numero da 1 a 30).
+5. Dopo il voto, vai a capo e fai una NUOVA domanda specifica.
+6. Non superare le 100 parole totali."""
                     
                     try:
                         risposta_prof = chat_professore_gemini(system_prompt, st.session_state.messaggi_chat)
-                        st.markdown(risposta_prof)
+                        
+                        voto = 0
+                        if "VOTO:" in risposta_prof:
+                            try:
+                                parte_voto = risposta_prof.split("VOTO:")[1].strip()
+                                numeri = "".join(filter(str.isdigit, parte_voto[:3]))
+                                voto = int(numeri)
+                            except: voto = 0
+
+                        if voto > 0:
+                            parti = risposta_prof.split("VOTO:")
+                            commento = parti[0].strip()
+                            resto = parti[1].split(str(voto), 1)
+                            nuova_domanda = resto[1].strip() if len(resto) > 1 else ""
+                            
+                            st.markdown(commento)
+                            
+                            if voto <= 11:
+                                st.error(f"🔴 VOTO: {voto}/30 - Pessimo. Guardi meno Netflix e studi di più.")
+                            elif 12 <= voto <= 17:
+                                st.warning(f"🟡 VOTO: {voto}/30 - Insufficiente. Si sta scavando la fossa da solo.")
+                            else:
+                                st.success(f"🟢 VOTO: {voto}/30 - Notevole. Non si abitui a questi successi.")
+                            
+                            if nuova_domanda:
+                                st.markdown(f"--- \n**Prossima domanda:** \n{nuova_domanda}")
+                            
+                            # --- LA PAUSA TATTICA ---
+                            st.info("⌛ Il professore ti sta lasciando 5 secondi per riflettere sul voto...")
+                            time.sleep(5)
+                        else:
+                            st.markdown(risposta_prof)
+
                         st.session_state.messaggi_chat.append({"ruolo": "assistant", "contenuto": risposta_prof})
+                        st.rerun() # Forza il refresh per pulire la barra dell'input
                     except Exception as e:
-                        st.error(f"Il professore ha avuto un calo di zuccheri: {e}")
+                        st.error(f"Il professore ha avuto un mancamento: {e}")
 with tab4:
     st.subheader("🧪 Arena di Farmacia")
 
