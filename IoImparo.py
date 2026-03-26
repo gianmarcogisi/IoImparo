@@ -336,12 +336,16 @@ Scrivi un riassunto discorsivo, chiaro, con le parole chiave in grassetto.
 
                         st.markdown("### 🖼️ Schema Concettuale Visivo")
                         if codice_mermaid and "graph" in codice_mermaid:
+                            # Ultima scure per forzare gli a capo
+                            codice_mermaid = codice_mermaid.replace("] ", "]\n")
                             html_code = f"""
                             <div id="wrapper" style="width: 100%; background: white; border-radius: 10px; border: 1px solid #ccc; position: relative;">
                                 <button onclick="downloadSVG()" style="position: absolute; top: 10px; left: 10px; z-index: 100; padding: 8px 12px; background: #4F46E5; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">
                                     💾 Scarica per Stampa (PNG)
                                 </button>
-                                <div id="graphDiv" style="width: 100%; height: 600px;">{codice_mermaid}</div>
+                                <div id="graphDiv" class="mermaid" style="width: 100%; height: 600px;">
+{codice_mermaid}
+</div>
                             </div>
                             <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
                             <script src="https://cdn.jsdelivr.net/npm/svg-pan-zoom@3.6.1/dist/svg-pan-zoom.min.js"></script>
@@ -1046,4 +1050,6 @@ with tab7:
                     )
     else:
         st.info("Il tuo archivio privato è ancora vuoto. Elabora un PDF nella Fase 1 e salvalo come Privato!")
+
+
 
