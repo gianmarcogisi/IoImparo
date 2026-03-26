@@ -250,64 +250,100 @@ with tab1:
                 st.stop()
             st.session_state.ultimo_utilizzo = time.time()
 
-            with st.spinner("Lavorando con Gemini Vision (sto leggendo un sacco di dati, abbi pazienza)..."):
-                try:
-                    contenuti = ["""Agisci come il miglior assistente universitario del mondo, esperto in Visual Learning (apprendimento visivo). Analizza il materiale fornito e scrivi un documento diviso ESATTAMENTE in queste 3 sezioni ben visibili:
-
---- SEZIONE 1: TRASCRIZIONE ---
-(Se ti ho fornito un'immagine, trascrivi fedelmente tutto il testo che vedi. Se è un PDF testuale, scrivi semplicemente: 'Documento digitale riconosciuto').
-
---- SEZIONE 2: SCHEMA CONCETTUALE GRAFICO (Mermaid.js) ---
-(Genera ESCLUSIVAMENTE codice Mermaid.js valido per creare un diagramma. Scegli il tipo più adatto tra:
-1. Flowchart (`graph TD` o `graph LR`) per processi, cicli e relazioni causa-effetto.
-2. Mindmap (`mindmap`) per gerarchie pure e ramificazioni concettuali.
-Non aggiungere commenti, spiegazioni o testo Markdown (come ```mermaid) prima o dopo il codice. Inizia direttamente con 'graph...' o 'mindmap...'. Assicurati che il testo all'interno dei nodi sia breve e chiaro).
-
---- SEZIONE 3: RIASSUNTO COMPLETO ---
-(Scrivi un riassunto discorsivo, chiaro e approfondito per studiare, evidenziando in grassetto le parole chiave)."""]
-                    
-                    if is_foto:
-                        for foto in file_input:
-                            contenuti.append(Image.open(foto))
-                    else:
-                        reader = PyPDF2.PdfReader(file_input)
-                        contenuti.append("".join([page.extract_text() for page in reader.pages]))
-
-                    response = client.models.generate_content(model='gemini-2.5-flash', contents=contenuti)
-                    st.session_state.testo_pulito_studente = response.text
-                    st.session_state.riassunto_pdf = genera_pdf_scaricabile(response.text)
-                    
+            with st.spinner("🧠 Il Prof. Gemini sta analizzando i tuoi appunti... (Questa operazione richiede qualche secondo)"):
                     try:
-                        supabase.table("appunti_salvati").insert({
-                            "user_id": st.session_state.utente_loggato.id,
-                            "testo_estratto": st.session_state.testo_pulito_studente,
-                            "is_public": is_public,
-                            "titolo": titolo_appunto if is_public else "Appunto Privato",
-                            "materia": materia_appunto if is_public else "Generica"
-                        }).execute()
+                        # 1. IL NUOVO PROMPT A PROVA DI BOMBA CON I TAG
+                        contenuti = ["""Agisci come il miglior assistente universitario del mondo. 
+Dividi la tua risposta ESATTAMENTE usando questi tag speciali (non usare nient'altro per dividere le sezioni):
+
+[TRASCRIZIONE]
+(Se immagine, trascrivi il testo fedelmente. Se PDF, scrivi solo 'Documento riconosciuto').
+[/TRASCRIZIONE]
+
+[SCHEMA]
+(Genera ESCLUSIVAMENTE codice Mermaid.js valido. Scegli tra graph TD o mindmap. NESSUN commento extra, NESSUN markdown o ```mermaid. Inizia direttamente con graph o mindmap).
+[/SCHEMA]
+
+[RIASSUNTO]
+(Scrivi un riassunto discorsivo, chiaro ed esaustivo con le parole chiave in grassetto).
+[/RIASSUNTO]"""]
                         
-                        if is_public: st.toast("🌍 Salvato e condiviso con la Community!", icon="✅")
-                        else: st.toast("🔒 Salvato nel tuo archivio privato!", icon="✅")
+                        if is_foto:
+                            for foto in file_input: contenuti.append(Image.open(foto))
+                        else:
+                            reader = PyPDF2.PdfReader(file_input)
+                            contenuti.append("".join([page.extract_text() for page in reader.pages]))
+
+                        response = client.models.generate_content(model='gemini-2.5-flash', contents=contenuti)
+                        st.session_state.testo_pulito_studente = response.text
+                        st.session_state.riassunto_pdf = genera_pdf_scaricabile(response.text)
                         
-                        # --- NUOVO SISTEMA DI RIMOZIONE CRONOLOGICA (> 25) ---
-                        MAX_APPUNTI_MEMORIA = 25 
-                        # Prendiamo solo i tuoi appunti PRIVATI, dal più vecchio al più nuovo
-                        res_storico = supabase.table("appunti_salvati").select("id").eq("user_id", st.session_state.utente_loggato.id).eq("is_public", False).order("created_at").execute()
+                        # --- 2. GESTIONE OUTPUT INTELLIGENTE ---
+                        testo_gemini = response.text
                         
-                        if len(res_storico.data) > MAX_APPUNTI_MEMORIA:
-                            # Calcoliamo quanti file sono in eccesso
-                            appunti_da_eliminare = len(res_storico.data) - MAX_APPUNTI_MEMORIA
-                            # Prendiamo gli ID dei primissimi (i più vecchi)
-                            ids_da_eliminare = [record['id'] for record in res_storico.data[:appunti_da_eliminare]]
+                        try:
+                            trascrizione = testo_gemini.split("[TRASCRIZIONE]")[1].split("[/TRASCRIZIONE]")[0].strip()
+                            codice_mermaid = testo_gemini.split("[SCHEMA]")[1].split("[/SCHEMA]")[0].strip()
+                            riassunto = testo_gemini.split("[RIASSUNTO]")[1].split("[/RIASSUNTO]")[0].strip()
+                        except:
+                            trascrizione, codice_mermaid, riassunto = "", "", testo_gemini # Fallback
+
+                        # Mostra Trascrizione
+                        st.markdown("### 📝 Trascrizione")
+                        st.write(trascrizione if trascrizione else "Documento elaborato.")
+
+                        # Mostra Schema Grafico
+                        st.markdown("### 🖼️ Schema Concettuale Visivo")
+                        if codice_mermaid and ("graph" in codice_mermaid or "mindmap" in codice_mermaid or "flowchart" in codice_mermaid):
+                            codice_mermaid = codice_mermaid.replace("```mermaid", "").replace("```", "").strip()
+                            html_code = f"""
+                            <div class="mermaid" style="display: flex; justify-content: center; background: white; border-radius: 10px; padding: 20px;">
+                            {codice_mermaid}
+                            </div>
+                            <script src="[https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js](https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js)"></script>
+                            <script>mermaid.initialize({{ startOnLoad: true, theme: 'base' }});</script>
+                            """
+                            st.components.v1.html(html_code, height=500, scrolling=True)
+                        else:
+                            st.warning("⚠️ Impossibile generare uno schema grafico per questo materiale.")
+                            if codice_mermaid: st.info(codice_mermaid)
+
+                        # Mostra Riassunto
+                        st.markdown("### 📖 Riassunto Completo")
+                        st.markdown(riassunto)
+
+                        # --- 3. IL BUG FIX DEL DATABASE ---
+                        try:
+                            supabase.table("appunti_salvati").insert({
+                                "user_id": st.session_state.utente_loggato.id,
+                                "testo_estratto": st.session_state.testo_pulito_studente,
+                                "is_public": is_public,
+                                "titolo": titolo_appunto,   # <--- ORA SALVA IL TITOLO VERO!
+                                "materia": materia_appunto  # <--- ORA SALVA LA MATERIA VERA!
+                            }).execute()
                             
-                            # Li cancelliamo fisicamente dal database
-                            for old_id in ids_da_eliminare:
-                                supabase.table("appunti_salvati").delete().eq("id", old_id).execute()
+                            if is_public: st.toast("🌍 Salvato e condiviso con la Community!", icon="✅")
+                            else: st.toast("🔒 Salvato nel tuo archivio privato!", icon="✅")
                             
-                            st.toast(f"🧹 Spazio ottimizzato: {len(ids_da_eliminare)} appunti vecchi eliminati per fare spazio!", icon="♻️")
-                                
-                    except Exception as e: 
-                        st.error(f"Errore DB: {e}")
+                            # --- SISTEMA DI RIMOZIONE CRONOLOGICA (> 25) ---
+                            MAX_APPUNTI_MEMORIA = 25 
+                            res_storico = supabase.table("appunti_salvati").select("id").eq("user_id", st.session_state.utente_loggato.id).eq("is_public", False).order("created_at").execute()
+                            
+                            if len(res_storico.data) > MAX_APPUNTI_MEMORIA:
+                                appunti_da_eliminare = len(res_storico.data) - MAX_APPUNTI_MEMORIA
+                                ids_da_eliminare = [record['id'] for record in res_storico.data[:appunti_da_eliminare]]
+                                for old_id in ids_da_eliminare:
+                                    supabase.table("appunti_salvati").delete().eq("id", old_id).execute()
+                                st.toast(f"🧹 Spazio ottimizzato: {len(ids_da_eliminare)} appunti vecchi eliminati per fare spazio!", icon="♻️")
+                                    
+                        except Exception as e: 
+                            st.error(f"Errore DB: {e}")
+                        
+                        st.balloons()
+                        
+                    except Exception as e:
+                        if "503" in str(e): st.warning("⏳ Server Google intasati. Riprova tra poco!")
+                        else: st.error(f"Errore Gemini: {e}")
                     
                     # --- GESTIONE INTELLIGENTE OUTPUT (GRAFICO + TESTO) ---
                     text_output = response.text
