@@ -298,17 +298,27 @@ Scrivi un riassunto discorsivo, chiaro, con le parole chiave in grassetto.
                         except:
                             trascrizione, codice_mermaid, riassunto = "", "", testo_gemini 
 
-                        # PULIZIA ACCENTI E FORZATURA STRUTTURALE PER MERMAID
+                        # --- BISTURI SINTATTICO DEFINITIVO (LIVELLO PRIMARIO) ---
                         import re
                         mappa_pulizia = str.maketrans("àèéìòùÀÈÉÌÒÙ", "aeeiouAEEIOU")
                         codice_mermaid = codice_mermaid.translate(mappa_pulizia).replace("```mermaid", "").replace("```", "").strip()
                         
-                        # Terapia d'urto anti-blocco di testo: forziamo gli a capo
-                        codice_mermaid = codice_mermaid.replace(";", ";\n")
-                        # Se l'IA scorda i punti e virgola, spacchiamo le righe dopo le parentesi quadre
-                        codice_mermaid = re.sub(r'\]\s+(?=[A-Za-z0-9_]+)', ']\n', codice_mermaid)
-                        # Assicuriamoci che l'intestazione sia isolata
-                        codice_mermaid = codice_mermaid.replace("graph TD", "graph TD\n").replace("\n\n", "\n")
+                        # 1. Rimuoviamo i caratteri letali per il motore grafico (il browser impazzisce con < e >)
+                        codice_mermaid = codice_mermaid.replace("(", "-").replace(")", "")
+                        codice_mermaid = codice_mermaid.replace("<", " min ").replace(">", " mag ")
+                        codice_mermaid = codice_mermaid.replace(";", "") # Via i punti e virgola inutili
+                        
+                        # 2. Isoliamo la testa del grafico (garantiamo che graph TD sia da solo)
+                        codice_mermaid = re.sub(r'(graph\s+TD)\s+', r'\1\n', codice_mermaid, flags=re.IGNORECASE)
+                        
+                        # 3. IL TAGLIO NETTO: andiamo a capo dopo ogni parentesi quadra chiusa "]"
+                        # SE E SOLO SE il carattere successivo è l'inizio logico di un nuovo nodo 
+                        # (cioè una Lettera/Numero seguita da una parentesi aperta "[" o da un trattino "-")
+                        codice_mermaid = re.sub(r'\]\s+(?=[A-Za-z0-9_]+\s*(?:\[|-))', ']\n', codice_mermaid)
+                        
+                        # 4. Pulizia finale delle righe vuote
+                        codice_mermaid = re.sub(r'\n+', '\n', codice_mermaid)
+                        # --------------------------------------------------------
 
                         # GENERAZIONE PDF CON LE 3 PARTI
                         st.session_state.riassunto_pdf = genera_pdf_scaricabile(trascrizione, codice_mermaid, riassunto)
@@ -1029,3 +1039,4 @@ with tab7:
                     )
     else:
         st.info("Il tuo archivio privato è ancora vuoto. Elabora un PDF nella Fase 1 e salvalo come Privato!")
+
