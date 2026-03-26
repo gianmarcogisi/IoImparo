@@ -499,7 +499,7 @@ Testo da usare: """ + testo_f2
                         # Facciamo un check rapido per vedere se la molecola esiste
                         check = requests.head(url_pubchem, timeout=3)
                         if check.status_code == 200:
-                            st.image(url_pubchem, width=300, caption=f"Struttura chimica: {q_v_raw}")
+                            st.image(url_pubchem, width=300)
                             image_shown = True
                     except: pass
 
@@ -513,7 +513,7 @@ Testo da usare: """ + testo_f2
                         for p_id in pages:
                             if "thumbnail" in pages[p_id]:
                                 wiki_url = pages[p_id]["thumbnail"]["source"]
-                                st.image(wiki_url, width=400, caption=f"Immagine scientifica (Wikipedia: {q_v_raw})")
+                                st.image(wiki_url, width=400)
                                 image_shown = True
                                 break
                     except: pass
@@ -524,10 +524,14 @@ Testo da usare: """ + testo_f2
                     frase_prompt = f"{q_v_raw} medical scientific illustration clean background"
                     q_v_ai = urllib.parse.quote(frase_prompt)
                     url_ai = f"https://image.pollinations.ai/prompt/{q_v_ai}?width=512&height=512&nologo=true"
-                    st.image(url_ai, width=400, caption="Rappresentazione concettuale (AI)")
+                    st.image(url_ai, width=400)
                     image_shown = True # Almeno l'AI risponde sempre
 
                 with st.expander("Gira la Carta 🔄"):
+                    # Rivela il nome del soggetto cercato solo ora!
+                    if q_v_raw:
+                        st.info(f"🧪 **Soggetto:** {q_v_raw}") # Nascosto e protetto dallo spoiler
+                    
                     st.success(f"**Risposta:** {carta.get('risposta')}")
 
             c1, c2, c3 = st.columns(3)
@@ -1076,6 +1080,7 @@ with tab7:
                     )
     else:
         st.info("Il tuo archivio privato è ancora vuoto. Elabora un PDF nella Fase 1 e salvalo come Privato!")
+
 
 
 
