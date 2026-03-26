@@ -257,25 +257,30 @@ with tab1:
 
                 with st.spinner("🧠 Il Prof. Gemini sta analizzando i tuoi appunti e disegnando la mappa..."):
                     try:
-                        # 1. IL NUOVO PROMPT CHE PERMETTE DESCRIZIONI PIÙ LUNGHE
-                        contenuti = ["""Agisci come il miglior assistente universitario del mondo. 
-Dividi la tua risposta ESATTAMENTE usando questi tag speciali (non usare nient'altro per dividere le sezioni):
+                        # 1. IL PROMPT CON IL LIMITE AI NODI
+                        if is_foto:
+                            istruzioni_trascrizione = "Trascrivi fedelmente tutto il testo dell'immagine."
+                        else:
+                            istruzioni_trascrizione = "Scrivi SOLO '📄 Documento PDF in memoria'. NON trascrivere nulla."
+
+                        contenuti = [f"""Agisci come il miglior assistente universitario del mondo. 
+Dividi la risposta ESATTAMENTE usando questi tag:
 
 [TRASCRIZIONE]
-(Se immagine, trascrivi il testo fedelmente. Se PDF, scrivi solo 'Documento riconosciuto').
+{istruzioni_trascrizione}
 [/TRASCRIZIONE]
 
 [SCHEMA]
-(Genera ESCLUSIVAMENTE codice Mermaid.js valido per un flowchart.
-REGOLE TASSATIVE PER NON FAR CRASHARE IL SISTEMA: 
-1. Usa SEMPRE la sintassi con parentesi quadre e virgolette doppie, in questo modo: A["Titolo: descrizione del concetto"] --> B["Altro titolo: altra spiegazione"].
-2. GRAZIE ALLE VIRGOLETTE `["..."]` puoi scrivere descrizioni più lunghe (10-20 parole per nodo). 
-3. NON USARE MAI altre virgolette doppie o apici ALL'INTERNO del testo stesso per non rompere il codice.
-4. Vai a capo dopo ogni collegamento. Inizia con graph TD.)
+Genera ESCLUSIVAMENTE codice Mermaid.js valido (formato graph TD).
+REGOLE TASSATIVE (Se sgarri il sistema va in crash):
+1. LIMITA la mappa a MASSIMO 15-20 NODI in totale. Estrai solo i concetti chiave, non fare ragnatele infinite.
+2. Usa SEMPRE la sintassi: A["Testo Breve"] --> B["Altro Testo Breve"]
+3. Vai SEMPRE a capo dopo ogni freccia.
+4. NESSUN carattere speciale, virgole, o virgolette interne ai testi dei nodi.
 [/SCHEMA]
 
 [RIASSUNTO]
-(Scrivi un riassunto discorsivo, chiaro ed esaustivo con le parole chiave in grassetto).
+Scrivi un riassunto discorsivo, chiaro, con le parole chiave in grassetto.
 [/RIASSUNTO]"""]
                         
                         if is_foto:
@@ -302,36 +307,45 @@ REGOLE TASSATIVE PER NON FAR CRASHARE IL SISTEMA:
                         st.markdown("### 📝 Trascrizione")
                         st.write(trascrizione if trascrizione else "Documento elaborato.")
 
-                        # --- Mostra Schema Grafico (NO TAGLI E LINK ESTERNO!) ---
+                        # --- Mostra Schema Grafico (CON MOTORE ZOOM 🚀) ---
                         st.markdown("### 🖼️ Schema Concettuale Visivo")
+                        st.info("💡 **Usa la rotellina del mouse per zoomare** e trascina la mappa per navigare!")
                         
-                        if codice_mermaid and ("graph" in codice_mermaid or "mindmap" in codice_mermaid or "flowchart" in codice_mermaid):
+                        if codice_mermaid and "graph" in codice_mermaid:
                             codice_mermaid = codice_mermaid.replace("```mermaid", "").replace("```", "").strip()
                             
-                            # 1. GENERIAMO IL LINK PER LO SCHERMO INTERO
-                            try:
-                                graphbytes = codice_mermaid.encode("utf8")
-                                base64_bytes = base64.b64encode(graphbytes)
-                                base64_string = base64_bytes.decode("ascii")
-                                url_immagine = f"https://mermaid.ink/svg/{base64_string}"
-                                st.success("✅ Mappa generata con successo!")
-                                st.markdown(f"**🔍 [CLICCA QUI PER APRIRE LA MAPPA A SCHERMO INTERO E ZOOMARE]({url_immagine})**")
-                            except:
-                                pass
-
-                            # 2. RENDERIZZIAMO IN PAGINA (CON TRUCCO ANTI-TAGLIO)
+                            # NUOVO CODICE HTML CON LIBRERIA PAN-ZOOM
                             html_code = f"""
-                            <div style="width: 100%; height: 100vh; overflow: auto; background: white; border-radius: 10px; padding: 20px;">
-                                <div class="mermaid" style="min-width: max-content; min-height: max-content;">
+                            <div style="width: 100%; height: 600px; background: white; border-radius: 10px; border: 1px solid #ccc; position: relative;">
+                                <div class="mermaid" id="graphDiv" style="width: 100%; height: 100%;">
                                 {codice_mermaid}
                                 </div>
                             </div>
                             <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+                            <script src="https://cdn.jsdelivr.net/npm/svg-pan-zoom@3.6.1/dist/svg-pan-zoom.min.js"></script>
                             <script>
-                                mermaid.initialize({{ startOnLoad: true, theme: 'base', flowchart: {{ useMaxWidth: false, htmlLabels: true }} }});
+                                mermaid.initialize({{ startOnLoad: true, theme: 'base' }});
+                                
+                                // Aspettiamo che Mermaid disegni, poi accendiamo il motore di Zoom
+                                setTimeout(function() {{
+                                    var svgElement = document.querySelector('#graphDiv svg');
+                                    if(svgElement) {{
+                                        svgElement.style.width = '100%';
+                                        svgElement.style.height = '100%';
+                                        svgElement.style.maxWidth = 'none';
+                                        svgPanZoom(svgElement, {{
+                                            zoomEnabled: true,
+                                            controlIconsEnabled: true, // Aggiunge i bottoni + e -
+                                            fit: true,
+                                            center: true,
+                                            minZoom: 0.5,
+                                            maxZoom: 10
+                                        }});
+                                    }}
+                                }}, 1500);
                             </script>
                             """
-                            st.components.v1.html(html_code, height=600, scrolling=True) 
+                            st.components.v1.html(html_code, height=650) 
                         else:
                             st.warning("⚠️ L'IA non è riuscita a trovare uno schema per questo testo.")
 
@@ -373,7 +387,6 @@ REGOLE TASSATIVE PER NON FAR CRASHARE IL SISTEMA:
         
         if st.session_state.riassunto_pdf:
             st.download_button("📩 Scarica PDF", data=st.session_state.riassunto_pdf, file_name="riassunto.pdf", mime="application/pdf")
-
 with tab2:
     if st.session_state.testo_pulito_studente:
         if st.button("Genera Flashcard 🚀"):
