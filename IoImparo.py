@@ -293,15 +293,13 @@ Dividi la risposta ESATTAMENTE usando questi tag:
 
 [SCHEMA]
 Genera ESCLUSIVAMENTE codice Mermaid.js valido (formato graph TD).
+Devi creare una VERA mappa concettuale inserendo SEMPRE un'etichetta di testo sulle frecce che spieghi la relazione tra i due nodi.
 REGOLE TASSATIVE (PENA IL FALLIMENTO DEL SISTEMA):
-1. MAX 15 NODI totali. Sii estremamente sintetico, estrai solo i concetti chiave.
-2. DEVI ANDARE A CAPO dopo ogni singolo collegamento. Vietato mettere due frecce sulla stessa riga!
-3. ESEMPIO DI FORMATO OBBLIGATORIO:
-graph TD
-A["Padre"] --> B["Figlio 1"]
-A["Padre"] --> C["Figlio 2"]
-4. Sviluppa in VERTICALE (graph TD). Max 2 frecce per nodo padre.
-5. VIETATO usare virgolette doppie, apici o parentesi tonde all'interno delle descrizioni ["..."].
+1. MAX 75 NODI totali. Estrai solo i concetti cardine.
+2. Usa ESATTAMENTE questa sintassi per mettere il testo sulla freccia: A["Concetto Padre"] -->|verbo o relazione| B["Concetto Figlio"];
+3. DEVI OBBLIGATORIAMENTE andare a capo e mettere il PUNTO E VIRGOLA (;) alla fine di ogni singolo collegamento.
+4. Sviluppa in VERTICALE. Max 2 o 3 frecce per nodo padre.
+5. VIETATO usare virgolette doppie, apici o parentesi tonde all'interno delle descrizioni ["..."] o delle etichette |...|.
 [/SCHEMA]
 
 [RIASSUNTO]
@@ -332,9 +330,17 @@ Scrivi un riassunto discorsivo, chiaro, con le parole chiave in grassetto.
                         except:
                             trascrizione, codice_mermaid, riassunto = "", "", testo_gemini 
 
-                        # PULIZIA ACCENTI PER MERMAID
+                        # PULIZIA ACCENTI E FORZATURA STRUTTURALE PER MERMAID
+                        import re
                         mappa_pulizia = str.maketrans("àèéìòùÀÈÉÌÒÙ", "aeeiouAEEIOU")
                         codice_mermaid = codice_mermaid.translate(mappa_pulizia).replace("```mermaid", "").replace("```", "").strip()
+                        
+                        # Terapia d'urto anti-blocco di testo: forziamo gli a capo
+                        codice_mermaid = codice_mermaid.replace(";", ";\n")
+                        # Se l'IA scorda i punti e virgola, spacchiamo le righe dopo le parentesi quadre
+                        codice_mermaid = re.sub(r'\]\s+(?=[A-Za-z0-9_]+)', ']\n', codice_mermaid)
+                        # Assicuriamoci che l'intestazione sia isolata
+                        codice_mermaid = codice_mermaid.replace("graph TD", "graph TD\n").replace("\n\n", "\n")
 
                         # GENERAZIONE PDF CON LE 3 PARTI
                         st.session_state.riassunto_pdf = genera_pdf_scaricabile(trascrizione, codice_mermaid, riassunto)
@@ -1037,5 +1043,3 @@ with tab7:
                     )
     else:
         st.info("Il tuo archivio privato è ancora vuoto. Elabora un PDF nella Fase 1 e salvalo come Privato!")
-
-
