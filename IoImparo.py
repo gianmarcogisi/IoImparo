@@ -182,7 +182,8 @@ with tab1:
             "Scegli file (Max 150 foto)" if is_foto else "Scegli file (Max 1 PDF)", 
             type=['png', 'jpg', 'jpeg'] if is_foto else ['pdf'], 
             accept_multiple_files=is_foto, 
-            key="file_up"
+            # AGGIUNGA tipo_file alla chiave per forzare il refresh del widget su mobile
+            key=f"file_up_{tipo_file}" 
         )
         
         troppe_foto = False
@@ -1080,6 +1081,8 @@ with tab7:
                     )
     else:
         st.info("Il tuo archivio privato è ancora vuoto. Elabora un PDF nella Fase 1 e salvalo come Privato!")
+
+
 
 
 
