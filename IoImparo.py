@@ -175,30 +175,18 @@ with tab1:
     
     with col1:
         st.subheader("📥 Carica Materiale")
-        tipo_file = st.radio("Formato:", ["📄 PDF", "📸 Foto"], horizontal=True)
         
-        is_foto = (tipo_file == "📸 Foto")
-        # --- SEPARAZIONE CANALI ---
-        if is_foto:
-            file_input = st.file_uploader(
-                "Scegli le foto degli appunti (Max 150)", 
-                type=['png', 'jpg', 'jpeg', 'webp', 'heic'], # <-- TERAPIA RIPRISTINATA
-                accept_multiple_files=True, 
-                key="canale_foto_multiplo"
-            )
-        else:
-            file_input = st.file_uploader(
-                "Scegli i file PDF (Max 5)", 
-                type=['pdf'], 
-                accept_multiple_files=True, 
-                key="canale_pdf_multiplo"
-            )
-        # -----------------------------------------------
+        # Un consiglio clinico per i nuovi utenti
+        st.info("💡 **Consiglio:** Usa un'app come *Adobe Scan* o *CamScanner* dal telefono per fotografare i tuoi appunti e unirli in un PDF pulito prima di caricarli!")
         
+        # Solo PDF, massimo 5
+        file_input = st.file_uploader(
+            "Scegli i file PDF (Max 5, max 100MB l'uno)", 
+            type=['pdf'], 
+            accept_multiple_files=True, 
+            key="canale_pdf_multiplo"
+        )
         troppe_foto = False
-        if is_foto and isinstance(file_input, list) and len(file_input) > 150:
-            st.error(f"🚨 Hai inserito {len(file_input)} foto! Rimuovine {len(file_input) - 150} per continuare.")
-            troppe_foto = True
             
         st.divider()
         st.subheader("💾 Opzioni di Salvataggio")
@@ -238,22 +226,17 @@ with tab1:
         
         if bottone_elabora:
             if not file_valido:
-                st.error("⚠️ Devi prima caricare almeno un file!")
+                st.error("⚠️ Devi prima caricare almeno un file PDF nel riquadro a sinistra!")
             else:
-                if is_foto:
-                    if len(file_input) > 150:
-                        st.error("🚨 Massimo 150 foto.")
+                # VALIDAZIONE PDF: MAX 5 FILE E 100MB L'UNO
+                if len(file_input) > 5:
+                    st.error("🚨 Hai caricato troppi PDF. Il limite è 5.")
+                    st.stop()
+                
+                for f in file_input:
+                    if f.size > 100 * 1024 * 1024:
+                        st.error(f"🚨 Il file '{f.name}' è troppo grande! Max 100 MB.")
                         st.stop()
-                else:
-                    # VALIDAZIONE PDF: MAX 5 FILE E 100MB L'UNO
-                    if len(file_input) > 5:
-                        st.error("🚨 Hai caricato troppi PDF. Il limite è 5.")
-                        st.stop()
-                    
-                    for f in file_input:
-                        if f.size > 100 * 1024 * 1024: # 100 MB
-                            st.error(f"🚨 Il file '{f.name}' è troppo grande! Max 100 MB.")
-                            st.stop()
 
                 if "ultimo_utilizzo" not in st.session_state: st.session_state.ultimo_utilizzo = 0
                 if time.time() - st.session_state.ultimo_utilizzo < 30:
@@ -261,10 +244,10 @@ with tab1:
                     st.stop()
                 st.session_state.ultimo_utilizzo = time.time()
 
-                # --- QUI INIZIA L'ELABORAZIONE (TUTTO RIENTRATO A DESTRA) ---
+                # --- QUI INIZIA L'ELABORAZIONE ---
                 with st.spinner("🧠 Analisi del materiale in corso..."):
                     try:
-                        st.session_state.testo_pulito_studente = "" # Azzera la memoria pregressa
+                        st.session_state.testo_pulito_studente = "" 
                         
                         prompt_base = f"""Agisci come il miglior assistente universitario del mondo. 
 Dividi la risposta ESATTAMENTE usando questi tag:
@@ -288,109 +271,11 @@ REGOLE TASSATIVE (PENA IL FALLIMENTO DEL SISTEMA):
 Scrivi un riassunto discorsivo, chiaro, con le parole chiave in grassetto.
 [/RIASSUNTO]"""
 
-                        # =======================================================
-                        # 1. LOGICA FOTO (Batch Unico: unisce tutto in un riassunto)
-                        # =======================================================
-                        if is_foto:
-                            istruzioni = "Trascrivi fedelmente tutto il testo dell'immagine."
-                            contenuti = [prompt_base.replace("{istruzioni_trascrizione}", istruzioni)]
-                            for foto in file_input: contenuti.append(Image.open(foto))
-                            
-                            response = client.models.generate_content(model='gemini-2.5-flash', contents=contenuti)
-                            testo_gemini = response.text
-                            st.session_state.testo_pulito_studente = testo_gemini
-                            
-                            try:
-                                trascrizione = testo_gemini.split("[TRASCRIZIONE]")[1].split("[/TRASCRIZIONE]")[0].strip()
-                                codice_mermaid = testo_gemini.split("[SCHEMA]")[1].split("[/SCHEMA]")[0].strip()
-                                riassunto = testo_gemini.split("[RIASSUNTO]")[1].split("[/RIASSUNTO]")[0].strip()
-                            except:
-                                trascrizione, codice_mermaid, riassunto = "", "", testo_gemini 
-                            
-                            import re
-                            mappa_pulizia = str.maketrans("àèéìòùÀÈÉÌÒÙ", "aeeiouAEEIOU")
-                            codice_mermaid = codice_mermaid.translate(mappa_pulizia).replace("```mermaid", "").replace("```", "").strip()
-                            codice_mermaid = codice_mermaid.replace("(", "-").replace(")", "")
-                            codice_mermaid = codice_mermaid.replace("-->", "FRECCIA_SALVA")
-                            codice_mermaid = codice_mermaid.replace("<", " min ").replace(">", " mag ")
-                            codice_mermaid = codice_mermaid.replace("FRECCIA_SALVA", "-->")
-                            codice_mermaid = codice_mermaid.replace(";", "")
-                            codice_mermaid = re.sub(r'(graph\s+TD)\s+', r'\1\n', codice_mermaid, flags=re.IGNORECASE)
-                            codice_mermaid = re.sub(r'\]\s+(?=[A-Za-z0-9_]+\s*(?:\[|-))', ']\n', codice_mermaid)
-                            codice_mermaid = re.sub(r'\n+', '\n', codice_mermaid)
-                            codice_mermaid = codice_mermaid.replace("] ", "]\n")
-                            
-                            st.markdown("### 📝 Trascrizione")
-                            st.write(trascrizione if trascrizione else "Documento elaborato.")
-
-                            st.markdown("### 🖼️ Schema Concettuale Visivo")
-                            if codice_mermaid and "graph" in codice_mermaid:
-                                html_code = f"""
-                                <div id="wrapper_foto" style="width: 100%; background: white; border-radius: 10px; border: 1px solid #ccc; position: relative;">
-                                    <button onclick="downloadSVG_foto()" style="position: absolute; top: 10px; left: 10px; z-index: 100; padding: 8px 12px; background: #4F46E5; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">
-                                        💾 Scarica per Stampa (PNG)
-                                    </button>
-                                    <div id="graphDiv_foto" class="mermaid" style="width: 100%; height: 600px;">\n{codice_mermaid}\n</div>
-                                </div>
-                                <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
-                                <script src="https://cdn.jsdelivr.net/npm/svg-pan-zoom@3.6.1/dist/svg-pan-zoom.min.js"></script>
-                                <script>
-                                    mermaid.initialize({{ startOnLoad: true, theme: 'base' }});
-                                    setTimeout(function() {{
-                                        var svgElement = document.querySelector('#graphDiv_foto svg');
-                                        if(svgElement) {{
-                                            svgElement.style.width = '100%'; svgElement.style.height = '100%'; svgElement.style.maxWidth = 'none';
-                                            window.panZoom_foto = svgPanZoom(svgElement, {{ zoomEnabled: true, controlIconsEnabled: true, fit: true, center: true }});
-                                        }}
-                                    }}, 1500);
-                                    function downloadSVG_foto() {{
-                                        var svg = document.querySelector('#graphDiv_foto svg');
-                                        var canvas = document.createElement('canvas');
-                                        var bbox = svg.getBBox();
-                                        canvas.width = bbox.width * 2; canvas.height = bbox.height * 2;
-                                        var context = canvas.getContext('2d');
-                                        var img = new Image();
-                                        var xml = new XMLSerializer().serializeToString(svg);
-                                        var svgBlob = new Blob([xml], {{type: 'image/svg+xml;charset=utf-8'}});
-                                        var url = URL.createObjectURL(svgBlob);
-                                        img.onload = function() {{
-                                            context.fillStyle = "white"; context.fillRect(0, 0, canvas.width, canvas.height);
-                                            context.drawImage(img, 0, 0, canvas.width, canvas.height);
-                                            var a = document.createElement("a");
-                                            a.href = canvas.toDataURL("image/png"); a.download = "Schema_IoImparo.png"; a.click();
-                                        }};
-                                        img.src = url;
-                                    }}
-                                </script>"""
-                                st.components.v1.html(html_code, height=650)
-                            
-                            st.markdown("### 📖 Riassunto Completo")
-                            st.markdown(riassunto)
-                            
-                            pdf_generato = genera_pdf_scaricabile(trascrizione, codice_mermaid, riassunto)
-                            st.download_button(label="📩 Scarica PDF Elaborato", data=pdf_generato, file_name="elaborato_foto.pdf", mime="application/pdf", use_container_width=True)
-
-                            try:
-                                dati_db = {
-                                    "user_id": st.session_state.utente_loggato.id,
-                                    "testo_estratto": testo_gemini,
-                                    "is_public": is_public, 
-                                    "titolo": titolo_appunto, 
-                                    "materia": materia_appunto
-                                }
-                                supabase.table("appunti_salvati").insert(dati_db).execute()
-                                st.toast("✅ Appunti fotografici salvati!", icon="💾")
-                            except Exception as db_err: st.error(f"Errore DB: {db_err}")
-
-                        # =======================================================
-                        # 2. LOGICA PDF (Catena di montaggio: isola ogni file)
-                        # =======================================================
-                        else:
-                            istruzioni = "Scrivi SOLO '📄 Documento PDF in memoria'. NON trascrivere nulla."
-                            prompt_pdf = prompt_base.replace("{istruzioni_trascrizione}", istruzioni)
-                            
-                            for i, pdf_file in enumerate(file_input):
-                                # Usiamo un expander per tenere l'interfaccia pulita se ci sono più PDF
+                        istruzioni = "Scrivi SOLO '📄 Documento PDF in memoria'. NON trascrivere nulla."
+                        prompt_pdf = prompt_base.replace("{istruzioni_trascrizione}", istruzioni)
+                        
+                        for i, pdf_file in enumerate(file_input):
+                            # Usiamo un expander per tenere l'interfaccia pulita se ci sono più PDF
                                 with st.expander(f"📊 Risultati Analisi: {pdf_file.name}", expanded=True):
                                     reader = PyPDF2.PdfReader(pdf_file)
                                     testo_estratto_pdf = "".join([page.extract_text() for page in reader.pages])
@@ -1162,4 +1047,5 @@ with tab7:
                         key=f"dl_privato_{ap['id']}"
                     )
     else:
+        st.info("Il tuo archivio privato è ancora vuoto. Elabora un PDF nella Fase 1 e salvalo come Privato!")
         st.info("Il tuo archivio privato è ancora vuoto. Elabora un PDF nella Fase 1 e salvalo come Privato!")
