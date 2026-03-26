@@ -498,7 +498,7 @@ Scrivi un riassunto discorsivo, chiaro, con le parole chiave in grassetto.
 
         # --- IL TASTO DOWNLOAD VA QUI (FUORI DAI BLOCCHI SOPRA MA DENTRO COL2) ---
         if st.session_state.riassunto_pdf:
-            st.download_button(
+           st.download_button(
                 label="📩 Scarica PDF Completo", 
                 data=st.session_state.riassunto_pdf, 
                 file_name="riassunto_ioimparo.pdf", 
