@@ -525,10 +525,10 @@ with tab3:
                 with st.chat_message("assistant"):
                     with st.spinner("Il Prof. annota le tue mancanze..."):
                         
-                    # PROMPT SPIETATO E MEMORIA DI FERRO
-                    system_prompt = f"""Sei un Prof. di Farmacia universitario spietato (stile Dr. House). Testo: {opzioni_esame[scelta_e]}
+                        # PROMPT SPIETATO E MEMORIA DI FERRO
+                        system_prompt = f"""Sei un Prof. di Farmacia universitario spietato (stile Dr. House). Testo: {opzioni_esame[scelta_e]}
 
-                    REGOLE TASSATIVE:
+                        REGOLE TASSATIVE:
                         1. Se lo studente scrive solo "Iniziamo", ti saluta o fa convenevoli: NON DARE NESSUN VOTO. Fai direttamente la prima domanda per avviare l'esame.
                         2. Se invece lo studente sta rispondendo a una tua domanda: valuta la risposta. Se corretta, sii ironico. Se errata, sii cinico e cattivo.
                         3. SOLO quando valuti una risposta vera, scrivi su una riga nuova: "VOTO: X" (numero da 1 a 30).
