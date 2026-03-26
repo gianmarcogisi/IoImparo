@@ -411,9 +411,30 @@ with tab2:
     if "flashcards" not in st.session_state: st.session_state.flashcards = []
     if "indice_flashcard" not in st.session_state: st.session_state.indice_flashcard = 0
     
-    if not st.session_state.testo_pulito_studente:
-        st.warning("⚠️ Vai prima nella Fase 1 e 'Spremi gli Appunti' per poter generare le tue carte!")
+    # --- NUOVA LOGICA: PESCHIAMO DALL'ARCHIVIO E DALLA FASE 1 ---
+    opzioni_appunti = {}
+    
+    # 1. Aggiungiamo gli appunti appena elaborati (se ci sono)
+    if st.session_state.testo_pulito_studente:
+        opzioni_appunti["✨ Appunti appena elaborati in Fase 1"] = st.session_state.testo_pulito_studente
+        
+    # 2. Peschiamo dal Database tutti gli appunti salvati dall'utente
+    try:
+        miei_appunti = supabase.table("appunti_salvati").select("id, titolo, materia, testo_estratto").eq("user_id", st.session_state.utente_loggato.id).order("created_at", desc=True).execute()
+        for ap in miei_appunti.data:
+            etichetta = f"📁 {ap['titolo']} | {ap['materia']}"
+            opzioni_appunti[etichetta] = ap['testo_estratto']
+    except Exception as e:
+        pass # Se c'è un errore di connessione, mostrerà solo quelli della Fase 1
+        
+    # --- CONTROLLO: SE NON HA NIENTE, AVVISO ---
+    if not opzioni_appunti:
+        st.warning("⚠️ Vai prima nella Fase 1 e 'Spremi gli Appunti' per poter generare le tue carte, oppure carica qualcosa dal tuo Archivio!")
     else:
+        # MENU A TENDINA PER SCEGLIERE L'ARGOMENTO
+        scelta_titolo = st.selectbox("📚 Scegli l'argomento da ripassare:", list(opzioni_appunti.keys()))
+        testo_appunti_da_usare = opzioni_appunti[scelta_titolo]
+
         col_f1, col_f2 = st.columns([2, 1])
         with col_f1:
             num_cards = st.slider("Quante Flashcard vuoi generare?", 5, 30, 10, key="cards_slider")
@@ -421,10 +442,9 @@ with tab2:
             st.write("")
             st.write("")
             if st.button("Genera Mazzo Visivo 🃏", type="primary", use_container_width=True, key="cards_gen_btn"):
-                with st.spinner("⏳ Il Prof. Gemini sta disegnando e scrivendo le tue carte..."):
+                with st.spinner(f"⏳ Il Prof. Gemini sta studiando '{scelta_titolo.split('|')[0]}' per te..."):
                     
                     # PROMPT SUPER-SICURO (senza f-string che fanno crashare Python)
-                    testo_appunti = st.session_state.testo_pulito_studente
                     prompt_flash = """Agisci come il miglior professore universitario. 
 Estrai """ + str(num_cards) + """ concetti chiave dal testo fornito e crea delle flashcard.
 Devi restituire ESATTAMENTE E SOLO un array JSON valido, senza nient'altro.
@@ -434,7 +454,7 @@ Regole "tipo_visuale":
 - Scrivi "immagine" (per anatomia, strumenti, cellule, organi, macchinari)
 - Scrivi "nessuno" (per concetti puramente teorici o legislativi)
 
-Regole "query_visuale" (USATO SOLO PER L'ANTEPRIMA - FALLBACK):
+Regole "query_visuale":
 - Se "molecola", SOLO IL NOME IN INGLESE (es. "paracetamol", "ibuprofen").
 - Se "immagine", breve parola chiave in inglese (es. "heart anatomy").
 - Se "nessuno", lascia vuoto "".
@@ -450,7 +470,7 @@ ESEMPIO JSON OBBLIGATORIO:
 ]
 
 TESTO DEGLI APPUNTI:
-""" + testo_appunti
+""" + testo_appunti_da_usare
 
                     try:
                         res = client.models.generate_content(model='gemini-2.5-flash', contents=prompt_flash)
@@ -482,27 +502,19 @@ TESTO DEGLI APPUNTI:
                     
                     # LOGICA VISUALE POTENZIATA E ANONIMA
                     if tipo_vis == 'molecola' and query_vis != "":
-                        # 1. TENTATIVO PUBCHEM (Priorità: Struttura Ufficiale)
+                        # 1. TENTATIVO PUBCHEM
                         pubchem_url = f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/{query_vis}/PNG"
-                        
-                        # CAPTION FISSO E ANONIMO PER NON SVELARE LA RISPOSTA (BUG 1 RISOLTO!)
                         st.image(pubchem_url, width=300, caption="🖼️ Struttura molecolare (Riconoscila!)")
 
-                        # 2. ANTEPRIMA DIAGRAMMA (FALLBACK GARANTITO - BUG 2 RISOLTO!)
-                        # Se PubChem non trova il nome, usiamo Pollinations per generare un diagramma generico
-                        # della struttura per aiutare la memoria visiva.
+                        # 2. ANTEPRIMA DIAGRAMMA POLLINATIONS (FALLBACK)
                         with st.expander("🖼️ Anteprima diagramma (se la struttura sopra non carica)"):
-                            # Creiamo una query pollinations specifica per diagrammi molecolari
-                            # Aggiungiamo '_molecular_diagram' per forzare lo stile diagramma
                             query_diagramma = str(query_vis).replace(' ', '_') + "_molecular_diagram"
                             img_url_fall = f"https://image.pollinations.ai/prompt/{query_diagramma}?width=300&height=200&nologo=true"
                             st.image(img_url_fall, width=300, caption="Diagramma di contesto")
                     
                     elif tipo_vis == 'immagine' and query_vis != "":
-                        # Generazione immagine generica
                         query_pulita = str(query_vis).replace(' ', '_')
                         img_url = f"https://image.pollinations.ai/prompt/{query_pulita}?width=400&height=300&nologo=true"
-                        # Caption descrittivo per concetti non molecolari (OK)
                         st.image(img_url, width=400, caption=f"Rappresentazione Visiva")
                 
                 # IL RETRO DELLA CARTA (Risposta Nascosta)
