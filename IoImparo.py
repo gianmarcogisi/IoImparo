@@ -4,8 +4,9 @@ import os
 from google import genai
 from PIL import Image
 import PyPDF2
-from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import letter
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet
 import io
 from supabase import create_client, Client
 import time
@@ -149,26 +150,35 @@ with col_profilo:
 st.divider()
 
 # --- 6. PDF ---
-def genera_pdf_scaricabile(testo):
+def genera_pdf_scaricabile(trascrizione, schema, riassunto):
     buf = io.BytesIO()
-    c = canvas.Canvas(buf, pagesize=letter)
-    c.setFont("Helvetica-Bold", 16)
-    c.drawString(100, 750, f"Riassunto Ordinato - {NOME_APP}")
-    c.setFont("Helvetica", 10)
-    text_object = c.beginText(100, 720)
-    for line in testo.split('\n'):
-        if len(line) > 90:
-            subline = ""
-            for word in line.split(' '):
-                if len(subline + " " + word) < 90: subline += " " + word
-                else:
-                    text_object.textLine(subline.strip())
-                    subline = word
-            text_object.textLine(subline.strip())
-        else: text_object.textLine(line)
-    c.drawText(text_object)
-    c.showPage()
-    c.save()
+    # Usiamo SimpleDocTemplate che gestisce le pagine multiple in automatico!
+    doc = SimpleDocTemplate(buf, pagesize=letter, rightMargin=50, leftMargin=50, topMargin=50, bottomMargin=50)
+    styles = getSampleStyleSheet()
+    
+    style_title = styles['Heading1']
+    style_sub = styles['Heading2']
+    style_normal = styles['Normal']
+    
+    story = []
+    
+    story.append(Paragraph("Appunti Completi - IoImparo 🎓", style_title))
+    story.append(Spacer(1, 20))
+    
+    story.append(Paragraph("📝 1. Trascrizione", style_sub))
+    story.append(Paragraph(trascrizione.replace('\n', '<br/>'), style_normal))
+    story.append(Spacer(1, 20))
+    
+    story.append(Paragraph("🖼️ 2. Schema Concettuale (Struttura Base)", style_sub))
+    story.append(Paragraph(schema.replace('\n', '<br/>'), style_normal))
+    story.append(Spacer(1, 20))
+    
+    story.append(Paragraph("📖 3. Riassunto Completo", style_sub))
+    # Puliamo il grassetto di markdown (**) per non far confondere il creatore di PDF
+    testo_riassunto = riassunto.replace('**', '') 
+    story.append(Paragraph(testo_riassunto.replace('\n', '<br/>'), style_normal))
+    
+    doc.build(story)
     buf.seek(0)
     return buf
 
@@ -288,10 +298,9 @@ Scrivi un riassunto discorsivo, chiaro, con le parole chiave in grassetto.
                         else:
                             reader = PyPDF2.PdfReader(file_input)
                             contenuti.append("".join([page.extract_text() for page in reader.pages]))
-
+                        
                         response = client.models.generate_content(model='gemini-2.5-flash', contents=contenuti)
                         st.session_state.testo_pulito_studente = response.text
-                        st.session_state.riassunto_pdf = genera_pdf_scaricabile(response.text)
                         
                         # --- 2. GESTIONE OUTPUT INTELLIGENTE ---
                         testo_gemini = response.text
@@ -303,7 +312,11 @@ Scrivi un riassunto discorsivo, chiaro, con le parole chiave in grassetto.
                         except:
                             trascrizione, codice_mermaid, riassunto = "", "", testo_gemini 
 
+                        # ORA CHE ABBIAMO LE 3 PARTI PULITE, CREIAMO IL PDF MULTI-PAGINA!
+                        st.session_state.riassunto_pdf = genera_pdf_scaricabile(trascrizione, codice_mermaid, riassunto)
+
                         # Mostra Trascrizione
+                        
                         st.markdown("### 📝 Trascrizione")
                         st.write(trascrizione if trascrizione else "Documento elaborato.")
 
