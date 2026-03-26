@@ -183,8 +183,8 @@ with tab1:
             # AGGIUNGIAMO .webp e .heic alla lista dei permessi
             type=['png', 'jpg', 'jpeg', 'webp', 'heic'] if is_foto else ['pdf'], 
             accept_multiple_files=is_foto, 
-            # Cambiamo la chiave dinamicamente per forzare il browser a resettare il widget
-            key=f"uploader_{tipo_file}" 
+            # AGGIUNGA tipo_file alla chiave per forzare il refresh su mobile
+            key=f"uploader_fissi_{tipo_file}" 
         )
         
         troppe_foto = False
@@ -1082,7 +1082,3 @@ with tab7:
                     )
     else:
         st.info("Il tuo archivio privato è ancora vuoto. Elabora un PDF nella Fase 1 e salvalo come Privato!")
-
-
-
-
