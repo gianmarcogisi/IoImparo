@@ -483,24 +483,49 @@ Testo da usare: """ + testo_f2
                 st.markdown(f"#### ❓ {carta.get('domanda')}")
                 
                 import urllib.parse
+                import requests # Fondamentale per controllare se i link sono "vivi"
+
                 t_v = carta.get('tipo_visuale')
-                
-                # Igiene di base: togliamo gli spazi bianchi all'inizio e alla fine generati per sbaglio
-                q_v_raw = str(carta.get('query_visuale', '')).strip()
-                
+                # Usiamo il nome inglese come priorità medica
+                q_v_raw = str(carta.get('nome_molecola_inglese_pubchem', carta.get('query_visuale', ''))).strip()
+                q_v_url = urllib.parse.quote(q_v_raw)
+
+                image_shown = False # Flag per capire se abbiamo trovato un'immagine
+
+                # --- LIVELLO 1: Ricerca Molecolare (PubChem) ---
                 if t_v == 'molecola' and q_v_raw:
-                    # PubChem vuole solo il nome nudo e crudo codificato
-                    q_v = urllib.parse.quote(q_v_raw)
-                    url = f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/{q_v}/PNG"
-                    st.image(url, width=300, caption="Struttura chimica (Riconoscila!)")
-                    
-                elif t_v == 'immagine' and q_v_raw:
-                    # Per Pollinations creiamo una frase vera e pulita, POI codifichiamo tutto il pacchetto
-                    frase_prompt = f"{q_v_raw} scientific concept illustration clean background"
-                    q_v_completo = urllib.parse.quote(frase_prompt)
-                    
-                    url = f"https://image.pollinations.ai/prompt/{q_v_completo}?width=512&height=512&nologo=true"
-                    st.image(url, width=400, caption="Rappresentazione concettuale")
+                    url_pubchem = f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/{q_v_url}/PNG"
+                    try:
+                        # Facciamo un check rapido per vedere se la molecola esiste
+                        check = requests.head(url_pubchem, timeout=3)
+                        if check.status_code == 200:
+                            st.image(url_pubchem, width=300, caption=f"Struttura chimica: {q_v_raw}")
+                            image_shown = True
+                    except: pass
+
+                # --- LIVELLO 2: Ricerca Scientifica Reale (Wikipedia) ---
+                # Se PubChem ha fallito o se non è una molecola, cerchiamo una foto vera
+                if not image_shown and q_v_raw:
+                    wiki_api = f"https://en.wikipedia.org/w/api.php?action=query&titles={q_v_url}&prop=pageimages&format=json&pithumbsize=500&redirects=1"
+                    try:
+                        res = requests.get(wiki_api, timeout=3).json()
+                        pages = res.get("query", {}).get("pages", {})
+                        for p_id in pages:
+                            if "thumbnail" in pages[p_id]:
+                                wiki_url = pages[p_id]["thumbnail"]["source"]
+                                st.image(wiki_url, width=400, caption=f"Immagine scientifica (Wikipedia: {q_v_raw})")
+                                image_shown = True
+                                break
+                    except: pass
+
+                # --- LIVELLO 3: Rappresentazione Concettuale AI (Pollinations) ---
+                # Il nostro paracadute finale: se non esiste una foto, la inventiamo
+                if not image_shown and q_v_raw:
+                    frase_prompt = f"{q_v_raw} medical scientific illustration clean background"
+                    q_v_ai = urllib.parse.quote(frase_prompt)
+                    url_ai = f"https://image.pollinations.ai/prompt/{q_v_ai}?width=512&height=512&nologo=true"
+                    st.image(url_ai, width=400, caption="Rappresentazione concettuale (AI)")
+                    image_shown = True # Almeno l'AI risponde sempre
 
                 with st.expander("Gira la Carta 🔄"):
                     st.success(f"**Risposta:** {carta.get('risposta')}")
