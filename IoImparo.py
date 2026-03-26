@@ -186,8 +186,7 @@ with tab1:
             accept_multiple_files=True, 
             key="canale_pdf_multiplo"
         )
-        troppe_foto = False
-            
+        
         st.divider()
         st.subheader("💾 Opzioni di Salvataggio")
         visibilita = st.radio("Visibilità Appunti:", ["🔒 Privato (Solo per me)", "🌍 Pubblico (Condividi nella Community)"], horizontal=True)
@@ -208,12 +207,13 @@ with tab1:
         titolo_appunto = st.text_input("Dai un titolo chiaro (es. Enzimi):")
         materia_appunto = st.selectbox("Seleziona la Materia:", lista_materie)
         
+        blocca_bottone = False
         # Controllo che il titolo non sia vuoto per non avere un Archivio disordinato
         if not titolo_appunto:
             st.warning("⚠️ Inserisci un Titolo per poter salvare i tuoi appunti.")
-            troppe_foto = True # Blocca il bottone finché non scrivi il titolo
+            blocca_bottone = True # Blocca il bottone finché non scrivi il titolo
 
-        bottone_elabora = st.button("Spremi Appunti 🪄", type="primary", use_container_width=True, disabled=troppe_foto)
+        bottone_elabora = st.button("Spremi Appunti 🪄", type="primary", use_container_width=True, disabled=blocca_bottone)
 
     with col2:
         st.subheader("📄 Risultato")
@@ -226,7 +226,7 @@ with tab1:
         
         if bottone_elabora:
             if not file_valido:
-                st.error("⚠️ Devi prima caricare almeno un file PDF nel riquadro a sinistra!")
+                st.error("⚠️ Devi prima caricare almeno un file!")
             else:
                 # VALIDAZIONE PDF: MAX 5 FILE E 100MB L'UNO
                 if len(file_input) > 5:
@@ -234,7 +234,7 @@ with tab1:
                     st.stop()
                 
                 for f in file_input:
-                    if f.size > 100 * 1024 * 1024:
+                    if f.size > 100 * 1024 * 1024: # 100 MB
                         st.error(f"🚨 Il file '{f.name}' è troppo grande! Max 100 MB.")
                         st.stop()
 
@@ -244,10 +244,10 @@ with tab1:
                     st.stop()
                 st.session_state.ultimo_utilizzo = time.time()
 
-                # --- QUI INIZIA L'ELABORAZIONE ---
+                # --- QUI INIZIA L'ELABORAZIONE (TUTTO RIENTRATO A DESTRA) ---
                 with st.spinner("🧠 Analisi del materiale in corso..."):
                     try:
-                        st.session_state.testo_pulito_studente = "" 
+                        st.session_state.testo_pulito_studente = "" # Azzera la memoria pregressa
                         
                         prompt_base = f"""Agisci come il miglior assistente universitario del mondo. 
 Dividi la risposta ESATTAMENTE usando questi tag:
@@ -271,112 +271,115 @@ REGOLE TASSATIVE (PENA IL FALLIMENTO DEL SISTEMA):
 Scrivi un riassunto discorsivo, chiaro, con le parole chiave in grassetto.
 [/RIASSUNTO]"""
 
-                        istruzioni = "Scrivi SOLO '📄 Documento PDF in memoria'. NON trascrivere nulla."
+                        # =======================================================
+                        # 2. LOGICA PDF (Catena di montaggio: isola ogni file)
+                        # =======================================================
+                        istruzioni = "Trascrivi fedelmente e in modo ordinato tutto il testo e i concetti chiave contenuti in questo documento."
                         prompt_pdf = prompt_base.replace("{istruzioni_trascrizione}", istruzioni)
                         
                         for i, pdf_file in enumerate(file_input):
                             # Usiamo un expander per tenere l'interfaccia pulita se ci sono più PDF
-                                with st.expander(f"📊 Risultati Analisi: {pdf_file.name}", expanded=True):
-                                    reader = PyPDF2.PdfReader(pdf_file)
-                                    testo_estratto_pdf = "".join([page.extract_text() for page in reader.pages])
-                                    contenuti = [prompt_pdf, testo_estratto_pdf]
-                                    
-                                    response = client.models.generate_content(model='gemini-2.5-flash', contents=contenuti)
-                                    testo_gemini = response.text
-                                    
-                                    st.session_state.testo_pulito_studente += f"\n--- {pdf_file.name} ---\n{testo_gemini}"
-                                    
-                                    try:
-                                        trascrizione = testo_gemini.split("[TRASCRIZIONE]")[1].split("[/TRASCRIZIONE]")[0].strip()
-                                        codice_mermaid = testo_gemini.split("[SCHEMA]")[1].split("[/SCHEMA]")[0].strip()
-                                        riassunto = testo_gemini.split("[RIASSUNTO]")[1].split("[/RIASSUNTO]")[0].strip()
-                                    except:
-                                        trascrizione, codice_mermaid, riassunto = "", "", testo_gemini 
-                                    
-                                    import re
-                                    mappa_pulizia = str.maketrans("àèéìòùÀÈÉÌÒÙ", "aeeiouAEEIOU")
-                                    codice_mermaid = codice_mermaid.translate(mappa_pulizia).replace("```mermaid", "").replace("```", "").strip()
-                                    codice_mermaid = codice_mermaid.replace("(", "-").replace(")", "")
-                                    codice_mermaid = codice_mermaid.replace("-->", "FRECCIA_SALVA")
-                                    codice_mermaid = codice_mermaid.replace("<", " min ").replace(">", " mag ")
-                                    codice_mermaid = codice_mermaid.replace("FRECCIA_SALVA", "-->")
-                                    codice_mermaid = codice_mermaid.replace(";", "")
-                                    codice_mermaid = re.sub(r'(graph\s+TD)\s+', r'\1\n', codice_mermaid, flags=re.IGNORECASE)
-                                    codice_mermaid = re.sub(r'\]\s+(?=[A-Za-z0-9_]+\s*(?:\[|-))', ']\n', codice_mermaid)
-                                    codice_mermaid = re.sub(r'\n+', '\n', codice_mermaid)
-                                    codice_mermaid = codice_mermaid.replace("] ", "]\n")
-                                    
-                                    st.markdown("### 📝 Trascrizione")
-                                    st.write(trascrizione if trascrizione else "Documento elaborato.")
+                            with st.expander(f"📊 Risultati Analisi: {pdf_file.name}", expanded=True):
+                                reader = PyPDF2.PdfReader(pdf_file)
+                                testo_estratto_pdf = "".join([page.extract_text() for page in reader.pages])
+                                contenuti = [prompt_pdf, testo_estratto_pdf]
+                                
+                                response = client.models.generate_content(model='gemini-2.5-flash', contents=contenuti)
+                                testo_gemini = response.text
+                                
+                                st.session_state.testo_pulito_studente += f"\n--- {pdf_file.name} ---\n{testo_gemini}"
+                                
+                                try:
+                                    trascrizione = testo_gemini.split("[TRASCRIZIONE]")[1].split("[/TRASCRIZIONE]")[0].strip()
+                                    codice_mermaid = testo_gemini.split("[SCHEMA]")[1].split("[/SCHEMA]")[0].strip()
+                                    riassunto = testo_gemini.split("[RIASSUNTO]")[1].split("[/RIASSUNTO]")[0].strip()
+                                except:
+                                    trascrizione, codice_mermaid, riassunto = "", "", testo_gemini 
+                                
+                                import re
+                                mappa_pulizia = str.maketrans("àèéìòùÀÈÉÌÒÙ", "aeeiouAEEIOU")
+                                codice_mermaid = codice_mermaid.translate(mappa_pulizia).replace("```mermaid", "").replace("```", "").strip()
+                                codice_mermaid = codice_mermaid.replace("(", "-").replace(")", "")
+                                codice_mermaid = codice_mermaid.replace("-->", "FRECCIA_SALVA")
+                                codice_mermaid = codice_mermaid.replace("<", " min ").replace(">", " mag ")
+                                codice_mermaid = codice_mermaid.replace("FRECCIA_SALVA", "-->")
+                                codice_mermaid = codice_mermaid.replace(";", "")
+                                codice_mermaid = re.sub(r'(graph\s+TD)\s+', r'\1\n', codice_mermaid, flags=re.IGNORECASE)
+                                codice_mermaid = re.sub(r'\]\s+(?=[A-Za-z0-9_]+\s*(?:\[|-))', ']\n', codice_mermaid)
+                                codice_mermaid = re.sub(r'\n+', '\n', codice_mermaid)
+                                codice_mermaid = codice_mermaid.replace("] ", "]\n")
+                                
+                                st.markdown("### 📝 Trascrizione")
+                                st.write(trascrizione if trascrizione else "Documento elaborato.")
 
-                                    st.markdown("### 🖼️ Schema Concettuale Visivo")
-                                    if codice_mermaid and "graph" in codice_mermaid:
-                                        # Identificatori dinamici (_i) per evitare conflitti JavaScript se ci sono più grafici
-                                        html_code = f"""
-                                        <div id="wrapper_{i}" style="width: 100%; background: white; border-radius: 10px; border: 1px solid #ccc; position: relative;">
-                                            <button onclick="downloadSVG_{i}()" style="position: absolute; top: 10px; left: 10px; z-index: 100; padding: 8px 12px; background: #4F46E5; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">
-                                                💾 Scarica per Stampa (PNG)
-                                            </button>
-                                            <div id="graphDiv_{i}" class="mermaid" style="width: 100%; height: 600px;">\n{codice_mermaid}\n</div>
-                                        </div>
-                                        <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
-                                        <script src="https://cdn.jsdelivr.net/npm/svg-pan-zoom@3.6.1/dist/svg-pan-zoom.min.js"></script>
-                                        <script>
-                                            mermaid.initialize({{ startOnLoad: true, theme: 'base' }});
-                                            setTimeout(function() {{
-                                                var svgElement = document.querySelector('#graphDiv_{i} svg');
-                                                if(svgElement) {{
-                                                    svgElement.style.width = '100%'; svgElement.style.height = '100%'; svgElement.style.maxWidth = 'none';
-                                                    window['panZoom_{i}'] = svgPanZoom(svgElement, {{ zoomEnabled: true, controlIconsEnabled: true, fit: true, center: true }});
-                                                }}
-                                            }}, 1500);
-                                            function downloadSVG_{i}() {{
-                                                var svg = document.querySelector('#graphDiv_{i} svg');
-                                                var canvas = document.createElement('canvas');
-                                                var bbox = svg.getBBox();
-                                                canvas.width = bbox.width * 2; canvas.height = bbox.height * 2;
-                                                var context = canvas.getContext('2d');
-                                                var img = new Image();
-                                                var xml = new XMLSerializer().serializeToString(svg);
-                                                var svgBlob = new Blob([xml], {{type: 'image/svg+xml;charset=utf-8'}});
-                                                var url = URL.createObjectURL(svgBlob);
-                                                img.onload = function() {{
-                                                    context.fillStyle = "white"; context.fillRect(0, 0, canvas.width, canvas.height);
-                                                    context.drawImage(img, 0, 0, canvas.width, canvas.height);
-                                                    var a = document.createElement("a");
-                                                    a.href = canvas.toDataURL("image/png"); a.download = "Schema_{pdf_file.name}.png"; a.click();
-                                                }};
-                                                img.src = url;
+                                st.markdown("### 🖼️ Schema Concettuale Visivo")
+                                if codice_mermaid and "graph" in codice_mermaid:
+                                    # Identificatori dinamici (_i) per evitare conflitti JavaScript se ci sono più grafici
+                                    html_code = f"""
+                                    <div id="wrapper_{i}" style="width: 100%; background: white; border-radius: 10px; border: 1px solid #ccc; position: relative;">
+                                        <button onclick="downloadSVG_{i}()" style="position: absolute; top: 10px; left: 10px; z-index: 100; padding: 8px 12px; background: #4F46E5; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">
+                                            💾 Scarica per Stampa (PNG)
+                                        </button>
+                                        <div id="graphDiv_{i}" class="mermaid" style="width: 100%; height: 600px;">\n{codice_mermaid}\n</div>
+                                    </div>
+                                    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+                                    <script src="https://cdn.jsdelivr.net/npm/svg-pan-zoom@3.6.1/dist/svg-pan-zoom.min.js"></script>
+                                    <script>
+                                        mermaid.initialize({{ startOnLoad: true, theme: 'base' }});
+                                        setTimeout(function() {{
+                                            var svgElement = document.querySelector('#graphDiv_{i} svg');
+                                            if(svgElement) {{
+                                                svgElement.style.width = '100%'; svgElement.style.height = '100%'; svgElement.style.maxWidth = 'none';
+                                                window['panZoom_{i}'] = svgPanZoom(svgElement, {{ zoomEnabled: true, controlIconsEnabled: true, fit: true, center: true }});
                                             }}
-                                        </script>"""
-                                        st.components.v1.html(html_code, height=650)
-                                    
-                                    st.markdown("### 📖 Riassunto Completo")
-                                    st.markdown(riassunto)
-                                    
-                                    pdf_generato = genera_pdf_scaricabile(trascrizione, codice_mermaid, riassunto)
-                                    st.download_button(label=f"📩 Scarica PDF Elaborato ({pdf_file.name})", data=pdf_generato, file_name=f"elaborato_{pdf_file.name}", mime="application/pdf", key=f"dl_pdf_{i}", use_container_width=True)
+                                        }}, 1500);
+                                        function downloadSVG_{i}() {{
+                                            var svg = document.querySelector('#graphDiv_{i} svg');
+                                            var canvas = document.createElement('canvas');
+                                            var bbox = svg.getBBox();
+                                            canvas.width = bbox.width * 2; canvas.height = bbox.height * 2;
+                                            var context = canvas.getContext('2d');
+                                            var img = new Image();
+                                            var xml = new XMLSerializer().serializeToString(svg);
+                                            var svgBlob = new Blob([xml], {{type: 'image/svg+xml;charset=utf-8'}});
+                                            var url = URL.createObjectURL(svgBlob);
+                                            img.onload = function() {{
+                                                context.fillStyle = "white"; context.fillRect(0, 0, canvas.width, canvas.height);
+                                                context.drawImage(img, 0, 0, canvas.width, canvas.height);
+                                                var a = document.createElement("a");
+                                                a.href = canvas.toDataURL("image/png"); a.download = "Schema_{pdf_file.name}.png"; a.click();
+                                            }};
+                                            img.src = url;
+                                        }}
+                                    </script>"""
+                                    st.components.v1.html(html_code, height=650)
+                                
+                                st.markdown("### 📖 Riassunto Completo")
+                                st.markdown(riassunto)
+                                
+                                pdf_generato = genera_pdf_scaricabile(trascrizione, codice_mermaid, riassunto)
+                                st.download_button(label=f"📩 Scarica PDF Elaborato ({pdf_file.name})", data=pdf_generato, file_name=f"elaborato_{pdf_file.name}", mime="application/pdf", key=f"dl_pdf_{i}", use_container_width=True)
 
-                                    # Salvataggio Database isolato
-                                    import base64
-                                    pdf_file.seek(0)
-                                    pdf_b64_to_save = base64.b64encode(pdf_file.read()).decode('utf-8')
-                                    
-                                    # Differenziamo il titolo se ci sono più PDF
-                                    titolo_finale = f"{titolo_appunto} ({pdf_file.name})" if len(file_input) > 1 else titolo_appunto
-                                    
-                                    try:
-                                        dati_db = {
-                                            "user_id": st.session_state.utente_loggato.id,
-                                            "testo_estratto": testo_gemini,
-                                            "is_public": is_public, 
-                                            "titolo": titolo_finale, 
-                                            "materia": materia_appunto,
-                                            "file_pdf_base64": pdf_b64_to_save
-                                        }
-                                        supabase.table("appunti_salvati").insert(dati_db).execute()
-                                        st.toast(f"✅ File salvato: {pdf_file.name}", icon="💾")
-                                    except Exception as db_err: st.error(f"Errore DB su {pdf_file.name}: {db_err}")
+                                # Salvataggio Database isolato
+                                import base64
+                                pdf_file.seek(0)
+                                pdf_b64_to_save = base64.b64encode(pdf_file.read()).decode('utf-8')
+                                
+                                # Differenziamo il titolo se ci sono più PDF
+                                titolo_finale = f"{titolo_appunto} ({pdf_file.name})" if len(file_input) > 1 else titolo_appunto
+                                
+                                try:
+                                    dati_db = {
+                                        "user_id": st.session_state.utente_loggato.id,
+                                        "testo_estratto": testo_gemini,
+                                        "is_public": is_public, 
+                                        "titolo": titolo_finale, 
+                                        "materia": materia_appunto,
+                                        "file_pdf_base64": pdf_b64_to_save
+                                    }
+                                    supabase.table("appunti_salvati").insert(dati_db).execute()
+                                    st.toast(f"✅ File salvato: {pdf_file.name}", icon="💾")
+                                except Exception as db_err: st.error(f"Errore DB su {pdf_file.name}: {db_err}")
 
                         st.balloons()
 
@@ -1047,5 +1050,4 @@ with tab7:
                         key=f"dl_privato_{ap['id']}"
                     )
     else:
-        st.info("Il tuo archivio privato è ancora vuoto. Elabora un PDF nella Fase 1 e salvalo come Privato!")
         st.info("Il tuo archivio privato è ancora vuoto. Elabora un PDF nella Fase 1 e salvalo come Privato!")
