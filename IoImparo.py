@@ -448,6 +448,7 @@ with tab2:
 Nessun blocco markdown, nessuna chiacchiera, solo l'array puro.
 Struttura: [{"domanda": "...", "tipo_visuale": "molecola", "query_visuale": "paracetamol", "risposta": "..."}]
 Tipi visuali permessi: "molecola", "immagine", "nessuno".
+REGOLA VITALE: Il campo 'query_visuale' DEVE SEMPRE contenere il nome della molecola o del concetto ESCLUSIVAMENTE IN INGLESE (es. 'vasopressin' e non 'vasopressina', 'ibuprofen' e non 'ibuprofene'). PubChem non capisce l'italiano.
 Testo da usare: """ + testo_f2
 
                     try:
