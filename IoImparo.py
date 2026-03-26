@@ -272,11 +272,11 @@ Dividi la risposta ESATTAMENTE usando questi tag:
 
 [SCHEMA]
 Genera ESCLUSIVAMENTE codice Mermaid.js valido (formato graph TD).
-REGOLE TASSATIVE (Se sgarri il sistema va in crash):
-1. LIMITA la mappa a MASSIMO 15-20 NODI in totale. Estrai solo i concetti chiave, non fare ragnatele infinite.
-2. Usa SEMPRE la sintassi: A["Testo Breve"] --> B["Altro Testo Breve"]
-3. Vai SEMPRE a capo dopo ogni freccia.
-4. NESSUN carattere speciale, virgole, o virgolette interne ai testi dei nodi.
+REGOLE TASSATIVE PER L'ESTETICA E LA STABILITÀ:
+1. Crea uno schema COMPLETO dell'argomento (puoi arrivare a 40-50 nodi), ma sviluppalo in VERTICALE (in profondità).
+2. Per evitare che si allarghi troppo orizzontalmente, collega MASSIMO 2 o 3 sotto-nodi ad ogni concetto genitore. Crea "catene" logiche verso il basso (es. A->B->C->D).
+3. Usa SEMPRE la sintassi: A["Testo Breve"] --> B["Altro Testo Breve"]
+4. Vai SEMPRE a capo dopo ogni freccia. Nessun carattere speciale o virgoletta extra nei testi.
 [/SCHEMA]
 
 [RIASSUNTO]
