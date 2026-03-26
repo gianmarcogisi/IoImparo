@@ -257,31 +257,25 @@ with tab1:
 
                 with st.spinner("🧠 Il Prof. Gemini sta analizzando i tuoi appunti e disegnando la mappa..."):
                     try:
-                        # 1. LA LOGICA DI TRASCRIZIONE ESATTA
-                        if is_foto:
-                            istruzioni_trascrizione = "Trascrivi fedelmente tutto il testo dell'immagine."
-                        else:
-                            istruzioni_trascrizione = "Scrivi SOLO '📄 Documento PDF in memoria'. NON trascrivere nulla."
-
-                        # 2. IL PROMPT PER IL GRAFICO (Super-Sintetico)
-                        contenuti = [f"""Agisci come il miglior assistente universitario del mondo. 
-Dividi la risposta ESATTAMENTE usando questi tag:
+                        # 1. IL PROMPT BLINDATO PER I GRAFICI (RIMANE UGUALE, TD È GIUSTO!)
+                        contenuti = ["""Agisci come il miglior assistente universitario del mondo. 
+Dividi la tua risposta ESATTAMENTE usando questi tag speciali (non usare nient'altro per dividere le sezioni):
 
 [TRASCRIZIONE]
-{istruzioni_trascrizione}
+(Se immagine, trascrivi il testo fedelmente. Se PDF, scrivi solo 'Documento riconosciuto').
 [/TRASCRIZIONE]
 
 [SCHEMA]
-Genera ESCLUSIVAMENTE codice Mermaid.js valido (formato graph TD).
-REGOLE TASSATIVE (Se sgarri il sistema va in crash):
-1. I testi dei nodi devono essere CORTISSIMI (1-3 parole).
-2. Usa questa sintassi base: A[Testo Breve] --> B[Altro Testo]
-3. Vai SEMPRE a capo dopo ogni freccia. Non mettere più collegamenti sulla stessa riga.
-4. NESSUN carattere speciale, virgole, parentesi tonde o punteggiatura nei testi dei nodi.
+(Genera ESCLUSIVAMENTE codice Mermaid.js valido per un flowchart o mindmap.
+REGOLE CRITICHE PER NON FAR CRASHARE IL SISTEMA: 
+1. Vai a capo dopo ogni collegamento (usa il tasto INVIO). Non scrivere tutto su una riga!
+2. I testi dentro i nodi devono essere BREVISSIMI (massimo 3-5 parole). Usa abbreviazioni.
+3. NON USARE MAI parentesi, virgolette o punteggiatura strana nei testi dei nodi.
+4. Inizia subito con graph TD o mindmap. Niente markdown extra.)
 [/SCHEMA]
 
 [RIASSUNTO]
-Scrivi un riassunto discorsivo, chiaro, con le parole chiave in grassetto.
+(Scrivi un riassunto discorsivo, chiaro ed esaustivo con le parole chiave in grassetto).
 [/RIASSUNTO]"""]
                         
                         if is_foto:
@@ -294,7 +288,7 @@ Scrivi un riassunto discorsivo, chiaro, con le parole chiave in grassetto.
                         st.session_state.testo_pulito_studente = response.text
                         st.session_state.riassunto_pdf = genera_pdf_scaricabile(response.text)
                         
-                        # --- 3. GESTIONE OUTPUT INTELLIGENTE ---
+                        # --- 2. GESTIONE OUTPUT INTELLIGENTE ---
                         testo_gemini = response.text
                         
                         try:
@@ -302,30 +296,44 @@ Scrivi un riassunto discorsivo, chiaro, con le parole chiave in grassetto.
                             codice_mermaid = testo_gemini.split("[SCHEMA]")[1].split("[/SCHEMA]")[0].strip()
                             riassunto = testo_gemini.split("[RIASSUNTO]")[1].split("[/RIASSUNTO]")[0].strip()
                         except:
-                            trascrizione, codice_mermaid, riassunto = "", "", testo_gemini 
+                            trascrizione, codice_mermaid, riassunto = "", "", testo_gemini # Fallback
 
                         # Mostra Trascrizione
                         st.markdown("### 📝 Trascrizione")
                         st.write(trascrizione if trascrizione else "Documento elaborato.")
 
-                        # --- Mostra Schema Grafico (LA VERA IMMAGINE GRAFICA) ---
+                        # --- Mostra Schema Grafico (LA VERA CORREZIONE CHIRURGICA!) ---
                         st.markdown("### 🖼️ Schema Concettuale Visivo")
-                        if codice_mermaid and "graph" in codice_mermaid:
-                            try:
-                                # Puliamo e prepariamo il codice
-                                codice_mermaid = codice_mermaid.replace("```mermaid", "").replace("```", "").strip()
-                                
-                                # Convertiamo in Base64 per ottenere l'immagine vera
-                                graphbytes = codice_mermaid.encode("utf8")
-                                base64_bytes = base64.b64encode(graphbytes)
-                                base64_string = base64_bytes.decode("ascii")
-                                
-                                # Streamlit scarica e mostra l'immagine vettoriale finita
-                                url_immagine = f"https://mermaid.ink/svg/{base64_string}"
-                                st.image(url_immagine, use_container_width=True)
-                                
-                            except Exception as e:
-                                st.error("L'IA ha generato uno schema troppo complesso e illeggibile.")
+                        
+                        if codice_mermaid and ("graph" in codice_mermaid or "mindmap" in codice_mermaid or "flowchart" in codice_mermaid):
+                            codice_mermaid = codice_mermaid.replace("```mermaid", "").replace("```", "").strip()
+                            
+                            # NUOVA SINTASSI HTML CON SCROLLING E SCALA MASSIVA
+                            html_code = f"""
+                            <div id="mermaid-container" style="width: 100%; height: 100%; overflow: scroll; display: flex; justify-content: center; background: white; border-radius: 10px; padding: 20px;">
+                                <div class="mermaid">
+                                {codice_mermaid}
+                                </div>
+                            </div>
+                            <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+                            <script>
+                                mermaid.initialize({{ startOnLoad: true, theme: 'base', 
+                                    // Impostazioni per leggibilità e scala fissa:
+                                    flowchart: {{
+                                        useMaxWidth: false,
+                                        htmlLabels: true,
+                                        scale: 1.8 // Scala il diagramma in modo significativo per la leggibilità
+                                    }},
+                                    mindmap: {{
+                                        useMaxWidth: false,
+                                        scale: 1.8
+                                    }},
+                                    themeVariables: {{ 'primaryColor': '#4F46E5', 'primaryTextColor': '#fff', 'lineColor': '#4F46E5' }}
+                                }});
+                            </script>
+                            """
+                            # Aumentiamo l'altezza del componente in modo massiccio per lo scrolling
+                            st.components.v1.html(html_code, height=3000, scrolling=True) 
                         else:
                             st.warning("⚠️ L'IA non è riuscita a trovare uno schema per questo testo.")
 
@@ -333,7 +341,7 @@ Scrivi un riassunto discorsivo, chiaro, con le parole chiave in grassetto.
                         st.markdown("### 📖 Riassunto Completo")
                         st.markdown(riassunto)
 
-                        # --- 4. IL SALVATAGGIO NEL DATABASE ---
+                        # --- 3. IL SALVATAGGIO NEL DATABASE ---
                         try:
                             supabase.table("appunti_salvati").insert({
                                 "user_id": st.session_state.utente_loggato.id,
@@ -358,18 +366,6 @@ Scrivi un riassunto discorsivo, chiaro, con le parole chiave in grassetto.
                                     
                         except Exception as db_e: 
                             st.error(f"Errore DB: {db_e}")
-                        
-                        st.balloons()
-                        
-                    except Exception as e:
-                        if "503" in str(e): st.warning("⏳ Server Google intasati. Riprova tra poco!")
-                        else: st.error(f"Errore Gemini: {e}")
-                        
-                        st.balloons()
-                        
-                    except Exception as e:
-                        if "503" in str(e): st.warning("⏳ Server Google intasati. Riprova tra poco!")
-                        else: st.error(f"Errore Gemini: {e}")
                         
                         st.balloons()
                         
