@@ -390,7 +390,7 @@ Dividi la tua risposta ESATTAMENTE usando questi tag speciali (non usare nient'a
                     
                     st.balloons()
                             
-                    except Exception as e:
+except Exception as e:
                     if "503" in str(e): st.warning("⏳ Server Google intasati. Riprova tra poco!")
                     else: st.error(f"Errore: {e}")
         
