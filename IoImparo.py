@@ -344,7 +344,7 @@ REGOLE CRITICHE PER NON FAR CRASHARE IL SISTEMA:
                         
                         st.balloons()
                         
-                    except Exception as e:
+                        except Exception as e:
                         if "503" in str(e): st.warning("⏳ Server Google intasati. Riprova tra poco!")
                         else: st.error(f"Errore Gemini: {e}")
         
