@@ -290,7 +290,7 @@ REGOLE TASSATIVE PER L'ESTETICA E LA STABILITÀ:
 [/SCHEMA]
 
 [RIASSUNTO]
-Scrivi un riassunto discorsivo, chiaro, con le parole chiave in grassetto.
+Scrivi un riassunto discorsivo, chiaro, lungo con le parole chiave in grassetto.
 [/RIASSUNTO]"""]
                         
                         # 3. AGGIUNGIAMO I FILE CARICATI ALLA VARIABILE "contenuti"
