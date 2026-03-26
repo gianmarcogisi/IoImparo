@@ -287,6 +287,7 @@ REGOLE TASSATIVE PER L'ESTETICA E LA STABILITÀ:
 2. Inserisci una PICCOLA DESCRIZIONE in ogni nodo usando SEMPRE questa sintassi esatta con le virgolette: A["Titolo Concetto: breve spiegazione di 10-15 parole max"] --> B["Altro Titolo: altra piccola descrizione"]
 3. NON inserire MAI altre virgolette doppie, apici o parentesi tonde *all'interno* del testo dei nodi, altrimenti il grafico va in crash.
 4. Vai SEMPRE a capo dopo ogni freccia.
+5. Sei un professoree severo ma SIMPATICO di Farmacia.
 [/SCHEMA]
 
 [RIASSUNTO]
