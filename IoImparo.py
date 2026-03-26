@@ -838,11 +838,8 @@ with tab7:
         for ap in miei_archiviati.data:
             data_formattata = ap['created_at'][:10] # Prende solo la data YYYY-MM-DD
             with st.expander(f"📄 {ap['titolo']} | 🧬 {ap['materia']} (Creato il: {data_formattata})"):
-                st.write(ap['testo_estratto'][:500] + "... [Continua nel PDF]")
                 
-                st.divider()
-                
-                # Estraiamo le 3 sezioni dal testo salvato per non far crashare il PDF
+                # 1. Spacchettiamo PRIMA di fare qualsiasi cosa
                 testo_salvato = ap['testo_estratto']
                 try:
                     t_trasc = testo_salvato.split("[TRASCRIZIONE]")[1].split("[/TRASCRIZIONE]")[0].strip()
@@ -851,7 +848,13 @@ with tab7:
                 except:
                     t_trasc, t_schem, t_riass = "", "", testo_salvato
                     
-                # Bottone per scaricare al volo il PDF (Ora non crasha più!)
+                # 2. ORA mostriamo a schermo SOLO il riassunto (senza codici!)
+                anteprima = t_riass[:500] if t_riass else t_trasc[:500]
+                st.write(anteprima + "... [Continua nel PDF]")
+                
+                st.divider()
+                
+                # 3. Bottone per scaricare al volo il PDF
                 pdf_bytes = genera_pdf_scaricabile(t_trasc, t_schem, t_riass)
                 st.download_button(
                     label="📩 Scarica PDF Completo", 
