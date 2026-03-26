@@ -1,3 +1,4 @@
+import base64
 import streamlit as st
 import os
 from google import genai
@@ -254,34 +255,33 @@ with tab1:
                     st.stop()
                 st.session_state.ultimo_utilizzo = time.time()
 
-                with st.spinner("🧠 Il Prof. Gemini sta analizzando i tuoi appunti... (Questa operazione richiede qualche secondo)"):
+                with st.spinner("🧠 Il Prof. Gemini sta analizzando i tuoi appunti e disegnando la mappa..."):
                     try:
-                        # 1. LA LOGICA DI TRASCRIZIONE LA DECIDE PYTHON, NON L'IA!
+                        # 1. LA LOGICA DI TRASCRIZIONE ESATTA
                         if is_foto:
-                            istruzioni_trascrizione = "Trascrivi fedelmente e integralmente tutto il testo leggibile nell'immagine."
+                            istruzioni_trascrizione = "Trascrivi fedelmente tutto il testo dell'immagine."
                         else:
-                            istruzioni_trascrizione = "Scrivi ESATTAMENTE E SOLO questa frase: '📄 Documento PDF riconosciuto in memoria. Nessuna trascrizione necessaria.' (Non aggiungere assolutamente altro testo in questa sezione)."
+                            istruzioni_trascrizione = "Scrivi SOLO '📄 Documento PDF in memoria'. NON trascrivere nulla."
 
-                        # 2. IL PROMPT BLINDATO
+                        # 2. IL PROMPT PER IL GRAFICO (Super-Sintetico)
                         contenuti = [f"""Agisci come il miglior assistente universitario del mondo. 
-Dividi la tua risposta ESATTAMENTE usando questi tag speciali (non usare nient'altro per dividere le sezioni):
+Dividi la risposta ESATTAMENTE usando questi tag:
 
 [TRASCRIZIONE]
 {istruzioni_trascrizione}
 [/TRASCRIZIONE]
 
 [SCHEMA]
-Genera ESCLUSIVAMENTE codice Mermaid.js valido.
-REGOLE TASSATIVE PER EVITARE CRASH VISIVI:
-1. Usa solo il formato `graph TD`.
-2. Sintassi rigorosa obbligatoria: `A[Testo] --> B[Altro Testo]`.
-3. I testi nei nodi devono avere MASSIMO 3 PAROLE. Sii iper-sintetico!
-4. NESSUN carattere speciale, niente virgole, niente apici, niente parentesi tonde dentro i testi. Solo lettere e numeri.
-5. Inizia direttamente la prima riga con `graph TD`, senza nessun markdown come ```mermaid.
+Genera ESCLUSIVAMENTE codice Mermaid.js valido (formato graph TD).
+REGOLE TASSATIVE (Se sgarri il sistema va in crash):
+1. I testi dei nodi devono essere CORTISSIMI (1-3 parole).
+2. Usa questa sintassi base: A[Testo Breve] --> B[Altro Testo]
+3. Vai SEMPRE a capo dopo ogni freccia. Non mettere più collegamenti sulla stessa riga.
+4. NESSUN carattere speciale, virgole, parentesi tonde o punteggiatura nei testi dei nodi.
 [/SCHEMA]
 
 [RIASSUNTO]
-Scrivi un riassunto discorsivo, chiaro ed esaustivo con le parole chiave in grassetto.
+Scrivi un riassunto discorsivo, chiaro, con le parole chiave in grassetto.
 [/RIASSUNTO]"""]
                         
                         if is_foto:
@@ -308,29 +308,26 @@ Scrivi un riassunto discorsivo, chiaro ed esaustivo con le parole chiave in gras
                         st.markdown("### 📝 Trascrizione")
                         st.write(trascrizione if trascrizione else "Documento elaborato.")
 
-                        # Mostra Schema Grafico (FORZIAMO IL RENDERING HTML MODERNO)
+                        # --- Mostra Schema Grafico (LA VERA IMMAGINE GRAFICA) ---
                         st.markdown("### 🖼️ Schema Concettuale Visivo")
                         if codice_mermaid and "graph" in codice_mermaid:
-                            codice_mermaid = codice_mermaid.replace("```mermaid", "").replace("```", "").strip()
-                            
-                            html_code = f"""
-                            <!DOCTYPE html>
-                            <html>
-                            <body>
-                                <script type="module">
-                                    import mermaid from '[https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs](https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs)';
-                                    mermaid.initialize({{ startOnLoad: true, theme: 'default' }});
-                                </script>
-                                <div class="mermaid" style="display: flex; justify-content: center; background: white; padding: 20px; border-radius: 10px;">
-                                    {codice_mermaid}
-                                </div>
-                            </body>
-                            </html>
-                            """
-                            st.components.v1.html(html_code, height=600, scrolling=True)
+                            try:
+                                # Puliamo e prepariamo il codice
+                                codice_mermaid = codice_mermaid.replace("```mermaid", "").replace("```", "").strip()
+                                
+                                # Convertiamo in Base64 per ottenere l'immagine vera
+                                graphbytes = codice_mermaid.encode("utf8")
+                                base64_bytes = base64.b64encode(graphbytes)
+                                base64_string = base64_bytes.decode("ascii")
+                                
+                                # Streamlit scarica e mostra l'immagine vettoriale finita
+                                url_immagine = f"https://mermaid.ink/svg/{base64_string}"
+                                st.image(url_immagine, use_container_width=True)
+                                
+                            except Exception as e:
+                                st.error("L'IA ha generato uno schema troppo complesso e illeggibile.")
                         else:
-                            st.warning("⚠️ Impossibile generare uno schema grafico pulito per questo materiale.")
-                            if codice_mermaid: st.info(codice_mermaid)
+                            st.warning("⚠️ L'IA non è riuscita a trovare uno schema per questo testo.")
 
                         # Mostra Riassunto
                         st.markdown("### 📖 Riassunto Completo")
@@ -357,10 +354,16 @@ Scrivi un riassunto discorsivo, chiaro ed esaustivo con le parole chiave in gras
                                 ids_da_eliminare = [record['id'] for record in res_storico.data[:appunti_da_eliminare]]
                                 for old_id in ids_da_eliminare:
                                     supabase.table("appunti_salvati").delete().eq("id", old_id).execute()
-                                st.toast(f"🧹 Spazio ottimizzato: vecchi appunti eliminati!", icon="♻️")
+                                st.toast(f"🧹 Spazio ottimizzato!", icon="♻️")
                                     
                         except Exception as db_e: 
                             st.error(f"Errore DB: {db_e}")
+                        
+                        st.balloons()
+                        
+                    except Exception as e:
+                        if "503" in str(e): st.warning("⏳ Server Google intasati. Riprova tra poco!")
+                        else: st.error(f"Errore Gemini: {e}")
                         
                         st.balloons()
                         
