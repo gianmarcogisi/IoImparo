@@ -526,7 +526,7 @@ with tab3:
                     with st.spinner("Il Prof. annota le tue mancanze..."):
                         
                         # PROMPT SPIETATO E MEMORIA DI FERRO
-                        system_prompt = f"""Sei un Prof. di Farmacia universitario spietato (stile Dr. House). Testo: {testo_da_studiare}
+                        system_prompt = f"""Sei un Prof. di Farmacia universitario spietato (stile Dr. House). Testo: {opzioni_esame[scelta_e]}
 
                         REGOLE TASSATIVE:
                         1. Se lo studente scrive solo "Iniziamo", ti saluta o fa convenevoli: NON DARE NESSUN VOTO. Fai direttamente la prima domanda per avviare l'esame.
