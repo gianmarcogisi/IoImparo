@@ -254,18 +254,22 @@ with tab1:
                     st.stop()
                 st.session_state.ultimo_utilizzo = time.time()
 
-                with st.spinner("🧠 Il Prof. Gemini sta analizzando i tuoi appunti... (Questa operazione richiede qualche secondo)"):
-                    try:
-                        # 1. IL PROMPT A PROVA DI BOMBA CON I TAG
+                try:
+                        # 1. IL PROMPT BLINDATO PER I GRAFICI
                         contenuti = ["""Agisci come il miglior assistente universitario del mondo. 
 Dividi la tua risposta ESATTAMENTE usando questi tag speciali (non usare nient'altro per dividere le sezioni):
 
 [TRASCRIZIONE]
-(Se immagine, trascrivi il testo fedelmente. Se PDF, scrivi solo 'Documento riconosciuto').
+(Se immagine, trascrivi il testo. Se PDF, scrivi solo 'Documento riconosciuto').
 [/TRASCRIZIONE]
 
 [SCHEMA]
-(Genera ESCLUSIVAMENTE codice Mermaid.js valido. Scegli tra graph TD o mindmap. NESSUN commento extra, NESSUN markdown o ```mermaid. Inizia direttamente con graph o mindmap).
+(Genera ESCLUSIVAMENTE codice Mermaid.js valido per un flowchart o mindmap.
+REGOLE CRITICHE PER NON FAR CRASHARE IL SISTEMA: 
+1. Vai a capo dopo ogni collegamento (usa il tasto INVIO). Non scrivere tutto su una riga!
+2. I testi dentro i nodi devono essere BREVISSIMI (massimo 3-5 parole). Usa abbreviazioni.
+3. NON USARE MAI parentesi, virgolette o punteggiatura strana nei testi dei nodi.
+4. Inizia subito con graph TD o mindmap. Niente markdown extra.)
 [/SCHEMA]
 
 [RIASSUNTO]
@@ -296,20 +300,16 @@ Dividi la tua risposta ESATTAMENTE usando questi tag speciali (non usare nient'a
                         st.markdown("### 📝 Trascrizione")
                         st.write(trascrizione if trascrizione else "Documento elaborato.")
 
-                        # Mostra Schema Grafico
+                        # Mostra Schema Grafico (ORA USIAMO IL SISTEMA NATIVO DI STREAMLIT!)
                         st.markdown("### 🖼️ Schema Concettuale Visivo")
                         if codice_mermaid and ("graph" in codice_mermaid or "mindmap" in codice_mermaid or "flowchart" in codice_mermaid):
+                            # Puliamo eventuali errori di markdown di Gemini
                             codice_mermaid = codice_mermaid.replace("```mermaid", "").replace("```", "").strip()
-                            html_code = f"""
-                            <div class="mermaid" style="display: flex; justify-content: center; background: white; border-radius: 10px; padding: 20px;">
-                            {codice_mermaid}
-                            </div>
-                            <script src="[https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js](https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js)"></script>
-                            <script>mermaid.initialize({{ startOnLoad: true, theme: 'base' }});</script>
-                            """
-                            st.components.v1.html(html_code, height=500, scrolling=True)
+                            
+                            # Streamlit disegna in automatico se usi i tre apici inversi + mermaid
+                            st.markdown(f"```mermaid\n{codice_mermaid}\n```")
                         else:
-                            st.warning("⚠️ Impossibile generare uno schema grafico per questo materiale.")
+                            st.warning("⚠️ Impossibile generare uno schema grafico pulito per questo materiale.")
                             if codice_mermaid: st.info(codice_mermaid)
 
                         # Mostra Riassunto
@@ -337,7 +337,7 @@ Dividi la tua risposta ESATTAMENTE usando questi tag speciali (non usare nient'a
                                 ids_da_eliminare = [record['id'] for record in res_storico.data[:appunti_da_eliminare]]
                                 for old_id in ids_da_eliminare:
                                     supabase.table("appunti_salvati").delete().eq("id", old_id).execute()
-                                st.toast(f"🧹 Spazio ottimizzato: {len(ids_da_eliminare)} appunti vecchi eliminati per fare spazio!", icon="♻️")
+                                st.toast(f"🧹 Spazio ottimizzato: vecchi appunti eliminati!", icon="♻️")
                                     
                         except Exception as e: 
                             st.error(f"Errore DB: {e}")
