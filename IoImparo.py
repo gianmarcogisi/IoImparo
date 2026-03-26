@@ -152,7 +152,6 @@ st.divider()
 # --- 6. PDF ---
 def genera_pdf_scaricabile(trascrizione, schema, riassunto):
     buf = io.BytesIO()
-    # Usiamo SimpleDocTemplate che gestisce le pagine multiple in automatico!
     doc = SimpleDocTemplate(buf, pagesize=letter, rightMargin=50, leftMargin=50, topMargin=50, bottomMargin=50)
     styles = getSampleStyleSheet()
     
@@ -169,12 +168,12 @@ def genera_pdf_scaricabile(trascrizione, schema, riassunto):
     story.append(Paragraph(trascrizione.replace('\n', '<br/>'), style_normal))
     story.append(Spacer(1, 20))
     
-    story.append(Paragraph("🖼️ 2. Schema Concettuale (Struttura Base)", style_sub))
-    story.append(Paragraph(schema.replace('\n', '<br/>'), style_normal))
+    story.append(Paragraph("🖼️ 2. Schema Concettuale", style_sub))
+    # Invece del codice brutto, mettiamo un avviso elegante per il PDF
+    story.append(Paragraph("<i>[Nota: Lo schema visivo e navigabile è consultabile interattivamente all'interno della Centrale Operativa Web]</i>", style_normal))
     story.append(Spacer(1, 20))
     
     story.append(Paragraph("📖 3. Riassunto Completo", style_sub))
-    # Puliamo il grassetto di markdown (**) per non far confondere il creatore di PDF
     testo_riassunto = riassunto.replace('**', '') 
     story.append(Paragraph(testo_riassunto.replace('\n', '<br/>'), style_normal))
     
@@ -273,7 +272,7 @@ with tab1:
                         else:
                             istruzioni_trascrizione = "Scrivi SOLO '📄 Documento PDF in memoria'. NON trascrivere nulla."
 
-                        contenuti = [f"""Agisci come il miglior assistente universitario del mondo. 
+                        ccontenuti = [f"""Agisci come il miglior assistente universitario del mondo. 
 Dividi la risposta ESATTAMENTE usando questi tag:
 
 [TRASCRIZIONE]
@@ -283,10 +282,10 @@ Dividi la risposta ESATTAMENTE usando questi tag:
 [SCHEMA]
 Genera ESCLUSIVAMENTE codice Mermaid.js valido (formato graph TD).
 REGOLE TASSATIVE PER L'ESTETICA E LA STABILITÀ:
-1. Crea uno schema COMPLETO dell'argomento (puoi arrivare a 40-50 nodi), ma sviluppalo in VERTICALE (in profondità).
-2. Per evitare che si allarghi troppo orizzontalmente, collega MASSIMO 2 o 3 sotto-nodi ad ogni concetto genitore. Crea "catene" logiche verso il basso (es. A->B->C->D).
-3. Usa SEMPRE la sintassi: A["Testo Breve"] --> B["Altro Testo Breve"]
-4. Vai SEMPRE a capo dopo ogni freccia. Nessun carattere speciale o virgoletta extra nei testi.
+1. Sviluppa la mappa in VERTICALE (in profondità). NON collegare MAI più di 2 frecce allo stesso nodo padre per evitare che si allarghi troppo a dismisura.
+2. Inserisci una PICCOLA DESCRIZIONE in ogni nodo usando SEMPRE questa sintassi esatta con le virgolette: A["Titolo Concetto: breve spiegazione di 10-15 parole max"] --> B["Altro Titolo: altra piccola descrizione"]
+3. NON inserire MAI altre virgolette doppie, apici o parentesi tonde *all'interno* del testo dei nodi, altrimenti il grafico va in crash.
+4. Vai SEMPRE a capo dopo ogni freccia.
 [/SCHEMA]
 
 [RIASSUNTO]
@@ -843,8 +842,17 @@ with tab7:
                 
                 st.divider()
                 
-                # Bottone per scaricare al volo il PDF
-                pdf_bytes = genera_pdf_scaricabile(ap['testo_estratto'])
+                # Estraiamo le 3 sezioni dal testo salvato per non far crashare il PDF
+                testo_salvato = ap['testo_estratto']
+                try:
+                    t_trasc = testo_salvato.split("[TRASCRIZIONE]")[1].split("[/TRASCRIZIONE]")[0].strip()
+                    t_schem = testo_salvato.split("[SCHEMA]")[1].split("[/SCHEMA]")[0].strip()
+                    t_riass = testo_salvato.split("[RIASSUNTO]")[1].split("[/RIASSUNTO]")[0].strip()
+                except:
+                    t_trasc, t_schem, t_riass = "", "", testo_salvato
+                    
+                # Bottone per scaricare al volo il PDF (Ora non crasha più!)
+                pdf_bytes = genera_pdf_scaricabile(t_trasc, t_schem, t_riass)
                 st.download_button(
                     label="📩 Scarica PDF Completo", 
                     data=pdf_bytes, 
