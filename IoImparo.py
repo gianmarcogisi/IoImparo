@@ -75,39 +75,7 @@ def chat_professore_gemini(system_prompt, messaggi_chat):
     except Exception as e:
         raise e
 
-def invia_email_appunti(destinatario, titolo, materia, contenuto, pdf_b64=None):
-    try:
-        mittente = st.secrets.get("EMAIL_SENDER", "")
-        password = st.secrets.get("EMAIL_PASSWORD", "")
-        if not mittente or not password:
-            raise Exception("Credenziali email non configurate")
-            
-        msg = MIMEMultipart()
-        msg['From'] = mittente
-        msg['To'] = destinatario
-        msg['Subject'] = f"🎓 IoImparo - Appunti di {materia}: {titolo}"
-        
-        # Se c'è un file originale, inviamo quello!
-        if pdf_b64:
-            pdf_bytes = base64.b64decode(pdf_b64)
-            part = MIMEApplication(pdf_bytes, Name=f"{titolo}_Originale.pdf")
-            part['Content-Disposition'] = f'attachment; filename="{titolo}_Originale.pdf"'
-            msg.attach(part)
-            corpo_email = f"Ciao!\n\nUno studente ha condiviso un file con te dalla Community di IoImparo.\n\nMateria: {materia}\nTitolo: {titolo}\n\nTroverai il documento originale in allegato a questa email.\n\nBuono studio!"
-        else:
-            corpo_email = f"Ciao!\n\nEcco gli appunti di {materia} che hai richiesto...\n\nTitolo: {titolo}\n\n---\n\n{contenuto}\n\n---\nBuono studio!"
-            
-        msg.attach(MIMEText(corpo_email, 'plain', 'utf-8'))
-        
-        server = smtplib.SMTP('smtp.gmail.com', 587)
-        server.starttls()
-        server.login(mittente, password)
-        server.send_message(msg)
-        server.quit()
-        return True
-    except Exception as e:
-        print(f"Errore invio email: {e}")
-        return False
+
 
 # --- 3. GESTIONE SESSIONE UTENTE ---
 if "utente_loggato" not in st.session_state: st.session_state.utente_loggato = None
@@ -295,7 +263,7 @@ Dividi la risposta ESATTAMENTE usando questi tag:
 Genera ESCLUSIVAMENTE codice Mermaid.js valido (formato graph TD).
 Devi creare una VERA mappa concettuale inserendo SEMPRE un'etichetta di testo sulle frecce che spieghi la relazione tra i due nodi.
 REGOLE TASSATIVE (PENA IL FALLIMENTO DEL SISTEMA):
-1. MAX 30 NODI totali. Estrai solo i concetti cardine.
+1. MAX 15 NODI totali. Estrai solo i concetti cardine.
 2. Usa ESATTAMENTE questa sintassi per mettere il testo sulla freccia: A["Concetto Padre"] -->|verbo o relazione| B["Concetto Figlio"];
 3. DEVI OBBLIGATORIAMENTE andare a capo e mettere il PUNTO E VIRGOLA (;) alla fine di ogni singolo collegamento.
 4. Sviluppa in VERTICALE. Max 2 o 3 frecce per nodo padre.
@@ -973,24 +941,42 @@ with tab6:
             for ap in appunti_pubblici.data:
                 with st.expander(f"📖 {ap['titolo']} | 🧬 {ap['materia']}"):
                     st.caption("Anteprima del testo:")
-                    st.write(ap['testo_estratto'][:300] + "... [Continua]")
+                    
+                    # 1. Spacchettiamo il testo per nascondere i tag orribili dall'anteprima
+                    testo_salvato = ap['testo_estratto']
+                    try:
+                        t_trasc = testo_salvato.split("[TRASCRIZIONE]")[1].split("[/TRASCRIZIONE]")[0].strip()
+                        t_schem = testo_salvato.split("[SCHEMA]")[1].split("[/SCHEMA]")[0].strip()
+                        t_riass = testo_salvato.split("[RIASSUNTO]")[1].split("[/RIASSUNTO]")[0].strip()
+                    except:
+                        t_trasc, t_schem, t_riass = "", "", testo_salvato
+                        
+                    anteprima = t_riass[:500] if t_riass else t_trasc[:500]
+                    st.write(anteprima + "... [Continua nel PDF]")
                     
                     st.divider()
-                    col_mail_1, col_mail_2 = st.columns([3, 1])
-                    with col_mail_1:
-                        email_destinatario = st.text_input("Ricevi il file completo:", placeholder="La tua email...", key=f"mail_input_{ap['id']}")
-                    with col_mail_2:
-                        st.write("") 
-                        if st.button("Invia Email ✉️", key=f"btn_mail_{ap['id']}", use_container_width=True):
-                            if email_destinatario:
-                                with st.spinner("Invio in corso..."):
-                                    esito = invia_email_appunti(email_destinatario, ap['titolo'], ap['materia'], ap['testo_estratto'], ap.get('file_pdf_base64'))
-                                    if esito:
-                                        st.success("Inviato! Controlla la posta.")
-                                    else:
-                                        st.error("Errore nell'invio! Hai configurato i Secrets EMAIL_SENDER e EMAIL_PASSWORD?")
-                            else:
-                                st.warning("Inserisci l'email!")
+                    
+                    # 2. Asportazione della Mail e Trapianto del Download Diretto
+                    if ap.get('file_pdf_base64'):
+                        import base64
+                        st.download_button(
+                            label="📩 Scarica File Originale (PDF)", 
+                            data=base64.b64decode(ap['file_pdf_base64']), 
+                            file_name=f"{ap['titolo'].replace(' ', '_')}_Originale.pdf", 
+                            mime="application/pdf", 
+                            key=f"dl_comm_{ap['id']}",
+                            use_container_width=True
+                        )
+                    else:
+                        pdf_bytes = genera_pdf_scaricabile(t_trasc, t_schem, t_riass)
+                        st.download_button(
+                            label="📩 Scarica Appunti Elaborati (PDF)", 
+                            data=pdf_bytes, 
+                            file_name=f"{ap['titolo'].replace(' ', '_')}.pdf", 
+                            mime="application/pdf", 
+                            key=f"dl_comm_{ap['id']}",
+                            use_container_width=True
+                        )
         else:
             st.info("Nessun risultato trovato. Sii il primo a pubblicare!")
 # --- FASE 7: ARCHIVIO PRIVATO ---
