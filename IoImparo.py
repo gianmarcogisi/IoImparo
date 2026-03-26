@@ -462,8 +462,10 @@ Testo da usare: """ + testo_f2
                 st.write(f"### Carta {idx+1} di {len(st.session_state.flashcards)}")
                 st.markdown(f"#### ❓ {carta.get('domanda')}")
                 
+                import urllib.parse
                 t_v = carta.get('tipo_visuale')
-                q_v = str(carta.get('query_visuale', '')).replace(" ", "_")
+                q_v_raw = str(carta.get('query_visuale', ''))
+                q_v = urllib.parse.quote(q_v_raw)
                 
                 if t_v == 'molecola' and q_v:
                     url = f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/{q_v}/PNG"
