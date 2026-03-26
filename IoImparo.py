@@ -257,7 +257,7 @@ with tab1:
 
                 with st.spinner("🧠 Il Prof. Gemini sta analizzando i tuoi appunti e disegnando la mappa..."):
                     try:
-                        # 1. IL PROMPT BLINDATO PER I GRAFICI (RIMANE UGUALE, TD È GIUSTO!)
+                        # 1. IL NUOVO PROMPT CHE PERMETTE DESCRIZIONI PIÙ LUNGHE
                         contenuti = ["""Agisci come il miglior assistente universitario del mondo. 
 Dividi la tua risposta ESATTAMENTE usando questi tag speciali (non usare nient'altro per dividere le sezioni):
 
@@ -266,12 +266,12 @@ Dividi la tua risposta ESATTAMENTE usando questi tag speciali (non usare nient'a
 [/TRASCRIZIONE]
 
 [SCHEMA]
-(Genera ESCLUSIVAMENTE codice Mermaid.js valido per un flowchart o mindmap.
-REGOLE CRITICHE PER NON FAR CRASHARE IL SISTEMA: 
-1. Vai a capo dopo ogni collegamento (usa il tasto INVIO). Non scrivere tutto su una riga!
-2. I testi dentro i nodi devono essere BREVISSIMI (massimo 3-5 parole). Usa abbreviazioni.
-3. NON USARE MAI parentesi, virgolette o punteggiatura strana nei testi dei nodi.
-4. Inizia subito con graph TD o mindmap. Niente markdown extra.)
+(Genera ESCLUSIVAMENTE codice Mermaid.js valido per un flowchart.
+REGOLE TASSATIVE PER NON FAR CRASHARE IL SISTEMA: 
+1. Usa SEMPRE la sintassi con parentesi quadre e virgolette doppie, in questo modo: A["Titolo: descrizione del concetto"] --> B["Altro titolo: altra spiegazione"].
+2. GRAZIE ALLE VIRGOLETTE `["..."]` puoi scrivere descrizioni più lunghe (10-20 parole per nodo). 
+3. NON USARE MAI altre virgolette doppie o apici ALL'INTERNO del testo stesso per non rompere il codice.
+4. Vai a capo dopo ogni collegamento. Inizia con graph TD.)
 [/SCHEMA]
 
 [RIASSUNTO]
@@ -296,44 +296,42 @@ REGOLE CRITICHE PER NON FAR CRASHARE IL SISTEMA:
                             codice_mermaid = testo_gemini.split("[SCHEMA]")[1].split("[/SCHEMA]")[0].strip()
                             riassunto = testo_gemini.split("[RIASSUNTO]")[1].split("[/RIASSUNTO]")[0].strip()
                         except:
-                            trascrizione, codice_mermaid, riassunto = "", "", testo_gemini # Fallback
+                            trascrizione, codice_mermaid, riassunto = "", "", testo_gemini 
 
                         # Mostra Trascrizione
                         st.markdown("### 📝 Trascrizione")
                         st.write(trascrizione if trascrizione else "Documento elaborato.")
 
-                        # --- Mostra Schema Grafico (LA VERA CORREZIONE CHIRURGICA!) ---
+                        # --- Mostra Schema Grafico (NO TAGLI E LINK ESTERNO!) ---
                         st.markdown("### 🖼️ Schema Concettuale Visivo")
                         
                         if codice_mermaid and ("graph" in codice_mermaid or "mindmap" in codice_mermaid or "flowchart" in codice_mermaid):
                             codice_mermaid = codice_mermaid.replace("```mermaid", "").replace("```", "").strip()
                             
-                            # NUOVA SINTASSI HTML CON SCROLLING E SCALA MASSIVA
+                            # 1. GENERIAMO IL LINK PER LO SCHERMO INTERO
+                            try:
+                                graphbytes = codice_mermaid.encode("utf8")
+                                base64_bytes = base64.b64encode(graphbytes)
+                                base64_string = base64_bytes.decode("ascii")
+                                url_immagine = f"https://mermaid.ink/svg/{base64_string}"
+                                st.success("✅ Mappa generata con successo!")
+                                st.markdown(f"**🔍 [CLICCA QUI PER APRIRE LA MAPPA A SCHERMO INTERO E ZOOMARE]({url_immagine})**")
+                            except:
+                                pass
+
+                            # 2. RENDERIZZIAMO IN PAGINA (CON TRUCCO ANTI-TAGLIO)
                             html_code = f"""
-                            <div id="mermaid-container" style="width: 100%; height: 100%; overflow: scroll; display: flex; justify-content: center; background: white; border-radius: 10px; padding: 20px;">
-                                <div class="mermaid">
+                            <div style="width: 100%; height: 100vh; overflow: auto; background: white; border-radius: 10px; padding: 20px;">
+                                <div class="mermaid" style="min-width: max-content; min-height: max-content;">
                                 {codice_mermaid}
                                 </div>
                             </div>
                             <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
                             <script>
-                                mermaid.initialize({{ startOnLoad: true, theme: 'base', 
-                                    // Impostazioni per leggibilità e scala fissa:
-                                    flowchart: {{
-                                        useMaxWidth: false,
-                                        htmlLabels: true,
-                                        scale: 1.8 // Scala il diagramma in modo significativo per la leggibilità
-                                    }},
-                                    mindmap: {{
-                                        useMaxWidth: false,
-                                        scale: 1.8
-                                    }},
-                                    themeVariables: {{ 'primaryColor': '#4F46E5', 'primaryTextColor': '#fff', 'lineColor': '#4F46E5' }}
-                                }});
+                                mermaid.initialize({{ startOnLoad: true, theme: 'base', flowchart: {{ useMaxWidth: false, htmlLabels: true }} }});
                             </script>
                             """
-                            # Aumentiamo l'altezza del componente in modo massiccio per lo scrolling
-                            st.components.v1.html(html_code, height=3000, scrolling=True) 
+                            st.components.v1.html(html_code, height=600, scrolling=True) 
                         else:
                             st.warning("⚠️ L'IA non è riuscita a trovare uno schema per questo testo.")
 
