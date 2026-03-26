@@ -505,7 +505,7 @@ TESTO DEGLI APPUNTI:
                 if st.button("Ricomincia da capo 🔄"):
                     st.session_state.indice_flashcard = 0
                     st.rerun()
-            with tab3:
+with tab3:
     st.subheader("🧑‍🏫 Simulazione Esame Orale")
     st.write("Mettiti alla prova! Il Prof. Gemini ti farà domande specifiche sui tuoi appunti per testare la tua preparazione.")
     
