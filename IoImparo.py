@@ -266,13 +266,14 @@ with tab1:
 
                 with st.spinner("🧠 Il Prof. Gemini sta analizzando i tuoi appunti e disegnando la mappa..."):
                     try:
-                        # 1. IL PROMPT CON IL LIMITE AI NODI
+                        # 1. LA LOGICA DI TRASCRIZIONE
                         if is_foto:
                             istruzioni_trascrizione = "Trascrivi fedelmente tutto il testo dell'immagine."
                         else:
                             istruzioni_trascrizione = "Scrivi SOLO '📄 Documento PDF in memoria'. NON trascrivere nulla."
 
-                        ccontenuti = [f"""Agisci come il miglior assistente universitario del mondo. 
+                        # 2. DEFINIAMO LA VARIABILE "contenuti" CON IL PROMPT CORRETTO
+                        contenuti = [f"""Agisci come il miglior assistente universitario del mondo. 
 Dividi la risposta ESATTAMENTE usando questi tag:
 
 [TRASCRIZIONE]
@@ -292,16 +293,18 @@ REGOLE TASSATIVE PER L'ESTETICA E LA STABILITÀ:
 Scrivi un riassunto discorsivo, chiaro, con le parole chiave in grassetto.
 [/RIASSUNTO]"""]
                         
+                        # 3. AGGIUNGIAMO I FILE CARICATI ALLA VARIABILE "contenuti"
                         if is_foto:
                             for foto in file_input: contenuti.append(Image.open(foto))
                         else:
                             reader = PyPDF2.PdfReader(file_input)
                             contenuti.append("".join([page.extract_text() for page in reader.pages]))
-                        
+
+                        # 4. CHIAMIAMO GEMINI
                         response = client.models.generate_content(model='gemini-2.5-flash', contents=contenuti)
                         st.session_state.testo_pulito_studente = response.text
                         
-                        # --- 2. GESTIONE OUTPUT INTELLIGENTE ---
+                        # --- GESTIONE OUTPUT INTELLIGENTE ---
                         testo_gemini = response.text
                         
                         try:
