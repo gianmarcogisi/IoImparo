@@ -171,19 +171,20 @@ def genera_pdf_scaricabile(testo):
     buf.seek(0)
     return buf
 
-# TABS COMPLETI
+# TABS COMPLETI CON NOMI PULITI
 tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
     "🗺️ Fase 1: Elabora & PDF", 
     "⚡ Fase 2: Flashcard", 
     "🧑‍🏫 Fase 3: Esame",
     "🥊 Fase 4: Arena Farmacia",
-    "🏆 Fase 5: Profilo Ranked",
-    "🌍 Fase 6: Community",
-    "🗂️ Fase 7: Archivio Privato"
+    "🏆 Profilo Ranked",  
+    "🌍 Community",       
+    "🗂️ Archivio Privato" 
 ])
 
 with tab1:
     col1, col2 = st.columns([1, 2])
+    
     with col1:
         st.subheader("📥 Carica Materiale")
         tipo_file = st.radio("Formato:", ["📄 PDF", "📸 Foto"], horizontal=True)
@@ -206,14 +207,30 @@ with tab1:
         visibilita = st.radio("Visibilità Appunti:", ["🔒 Privato (Solo per me)", "🌍 Pubblico (Condividi nella Community)"], horizontal=True)
         is_public = (visibilita == "🌍 Pubblico (Condividi nella Community)")
         
-        titolo_appunto = "Appunti Senza Titolo"
+        # --- LA TUA LISTA DELLE MATERIE ---
+        lista_materie = [
+            "Chimica Generale ed Inorganica", "Biologia Animale", "Biologia Vegetale", "Fisica", 
+            "Matematica ed Informatica", "Anatomia Umana", "Chimica Organica", "Microbiologia", 
+            "Fisiologia Umana", "Analisi dei Medicinali I", "Biochimica", "Farmacologia e Farmacoterapia", 
+            "Analisi dei Medicinali II", "Patologia Generale", "Chimica Farmaceutica e Tossicologica I",
+            "Chimica Farmaceutica e Tossicologica II", "Tecnologia e Legislazione Farmaceutiche", 
+            "Tossicologia", "Chimica degli Alimenti", "Farmacognosia", "Farmacia Clinica", 
+            "Saggi e Dosaggi dei Farmaci", "Biochimica Applicata", "Fitoterapia", "Igiene"
+        ]
+        
+        titolo_appunto = "Appunto Privato"
         materia_appunto = "Generica"
+        
+        # Se sceglie Pubblico, compaiono i campi
         if is_public:
-            titolo_appunto = st.text_input("Dai un titolo (es. Enzimi):")
-            materia_appunto = st.text_input("Materia (es. Biochimica):")
-            if not titolo_appunto or not materia_appunto:
-                st.warning("⚠️ Inserisci Titolo e Materia per poter pubblicare.")
-                troppe_foto = True 
+            titolo_appunto = st.text_input("Dai un titolo chiaro (es. Enzimi):")
+            # Usa la tendina invece del testo libero!
+            materia_appunto = st.selectbox("Seleziona la Materia:", lista_materie)
+            
+            # Se il titolo è vuoto, blocca il bottone per evitare salvataggi anonimi
+            if not titolo_appunto:
+                st.warning("⚠️ Inserisci un Titolo per poter pubblicare.")
+                troppe_foto = True # Ricicliamo questa variabile per disabilitare il bottone
 
         bottone_elabora = st.button("Spremi Appunti 🪄", type="primary", use_container_width=True, disabled=troppe_foto)
 
@@ -337,15 +354,29 @@ REGOLE TASSATIVE (Se le violi, sei licenziato):
 3. Finita la correzione, fagli SUBITO una nuova domanda sul testo."""
             
             try:
-                with st.spinner("🧑‍🏫 Il Prof sta affilando il sarcasmo e valutando la tua risposta... Trema!"):
+                # --- LO SPINNER DEL PROFESSORE ---
+                with st.spinner("🧑‍🏫 Il Prof sta affilando il sarcasmo... Trema!"):
+                    # Chiamata a Gemini
                     risposta_prof = chat_professore_gemini(system_prompt, st.session_state.messaggi_chat)
                 
+                # 1. MOSTRA SUBITO LA RISPOSTA (così puoi leggerla durante la pausa)
                 with st.chat_message("assistant"): 
                     st.markdown(risposta_prof)
+                
+                # 2. AGGIUNGIAMO LA RISPOSTA ALLO STORICO
                 st.session_state.messaggi_chat.append({"ruolo": "assistant", "contenuto": risposta_prof})
                 
-            except Exception as e: st.error(f"Errore Chat: {e}")
-    else: st.warning("Carica prima qualcosa in Fase 1!")
+                # --- 3. LA PAUSA TATTICA DI 5 SECONDI ---
+                # Usiamo una caption per avvisarti
+                st.caption("⏱️ *Il Prof ti concede 5 secondi per assaporare la sua saggezza (e il suo sarcasmo) prima della prossima domanda...*")
+                time.sleep(5) # Aspetta 5 secondi reali
+                # ----------------------------------------
+                
+                # 4. ORA RICARICHIAMO LA PAGINA
+                st.rerun()
+                
+            except Exception as e: 
+                st.error(f"Errore Chat: {e}")
 
 with tab4:
     st.subheader("🧪 Arena di Farmacia")
