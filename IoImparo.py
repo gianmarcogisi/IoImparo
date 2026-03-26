@@ -494,8 +494,8 @@ Scrivi un riassunto discorsivo, chiaro, con le parole chiave in grassetto.
                         if "503" in str(e): st.warning("⏳ Server Google intasati. Riprova tra poco!")
                         else: st.error(f"Errore Gemini: {e}")
         
-                           if st.session_state.riassunto_pdf:
-                           st.download_button("📩 Scarica PDF", data=st.session_state.riassunto_pdf, file_name="riassunto.pdf", mime="application/pdf")
+                        if st.session_state.riassunto_pdf:
+                        st.download_button("📩 Scarica PDF", data=st.session_state.riassunto_pdf, file_name="riassunto.pdf", mime="application/pdf")
 with tab2:
     st.subheader("⚡ Flashcard Visive & Dinamiche")
     
