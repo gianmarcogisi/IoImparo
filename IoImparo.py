@@ -260,11 +260,12 @@ with tab1:
 
                 if "ultimo_utilizzo" not in st.session_state: st.session_state.ultimo_utilizzo = 0
                 if time.time() - st.session_state.ultimo_utilizzo < 30:
-                    st.warning("⏱️ Sistema in raffreddamento. Attendi 30 secondi tra un caricamento e l'altro.")
+                    st.warning("⏱️ Sistema in raffreddamento. Attendi 30 secondi.")
                     st.stop()
                 st.session_state.ultimo_utilizzo = time.time()
 
-    with st.spinner("🧠 Il Prof. Gemini sta analizzando i tuoi appunti e disegnando la mappa..."):
+                # --- QUI INIZIA L'ELABORAZIONE (TUTTO RIENTRATO A DESTRA) ---
+                with st.spinner("🧠 Il Prof. Gemini sta analizzando i tuoi appunti..."):
                     try:
                         # 1. LOGICA DI TRASCRIZIONE
                         if is_foto:
@@ -272,7 +273,7 @@ with tab1:
                         else:
                             istruzioni_trascrizione = "Scrivi SOLO '📄 Documento PDF in memoria'. NON trascrivere nulla."
 
-                        # 2. IL PROMPT (VERSIONE ANTI-CRASH)
+                        # 2. IL TUO PROMPT COMPLETO
                         contenuti = [f"""Agisci come il miglior assistente universitario del mondo. 
 Dividi la risposta ESATTAMENTE usando questi tag:
 
@@ -282,13 +283,13 @@ Dividi la risposta ESATTAMENTE usando questi tag:
 
 [SCHEMA]
 Genera ESCLUSIVAMENTE codice Mermaid.js valido (formato graph TD).
-Regole ferree della simulazione:
-1. Fai UNA SOLA domanda alla volta. Non fare elenchi di domande.
-2. Aspetta la risposta dello studente prima di proseguire.
-3. Valuta la sua risposta: se è giusta fagli i complimenti, se è sbagliata correggilo spiegando il perché.
-4. Subito dopo il feedback, fagli un'altra domanda su un argomento diverso dello stesso testo.
-5. Impersoni un professore di Farmacia Severo ma simpatico.
-6. Usa un tono accademico, professionale ma empatico.
+REGOLE TASSATIVE ANTI-CRASH (SE SBAGLI IL GRAFICO SARÀ BIANCO):
+1. Sviluppa in VERTICALE. Max 2 frecce per nodo padre.
+2. Usa questa sintassi esatta: A["Titolo: breve spiegazione"] --> B["Titolo: breve spiegazione"]
+3. VIETATO ANDARE A CAPO all'interno delle parentesi quadre ["..."]. Il testo della descrizione deve stare tutto su una singola riga!
+4. VIETATO usare altre virgolette doppie ("), apici (') o parentesi tonde dentro le descrizioni. Usa solo testo semplice.
+5. Vai a capo SOLO dopo aver completato l'intero collegamento della freccia.
+6. Impersoni un professore di Farmacia Severo ma simpatico.
 [/SCHEMA]
 
 [RIASSUNTO]
@@ -314,17 +315,17 @@ Scrivi un riassunto discorsivo, chiaro, con le parole chiave in grassetto.
                         except:
                             trascrizione, codice_mermaid, riassunto = "", "", testo_gemini 
 
-                        # PULIZIA AUTOMATICA ACCENTI (Per sicurezza extra)
+                        # PULIZIA ACCENTI PER MERMAID
                         mappa_pulizia = str.maketrans("àèéìòùÀÈÉÌÒÙ", "aeeiouAEEIOU")
                         codice_mermaid = codice_mermaid.translate(mappa_pulizia).replace("```mermaid", "").replace("```", "").strip()
 
+                        # GENERAZIONE PDF CON LE 3 PARTI
                         st.session_state.riassunto_pdf = genera_pdf_scaricabile(trascrizione, codice_mermaid, riassunto)
 
                         # --- MOSTRA RISULTATI ---
                         st.markdown("### 📝 Trascrizione")
                         st.write(trascrizione if trascrizione else "Documento elaborato.")
 
-                        # --- IL MOTORE GRAFICO (QUELLO CHE MANCAVA!) ---
                         st.markdown("### 🖼️ Schema Concettuale Visivo")
                         if codice_mermaid and "graph" in codice_mermaid:
                             html_code = f"""
@@ -332,9 +333,7 @@ Scrivi un riassunto discorsivo, chiaro, con le parole chiave in grassetto.
                                 <button onclick="downloadSVG()" style="position: absolute; top: 10px; left: 10px; z-index: 100; padding: 8px 12px; background: #4F46E5; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">
                                     💾 Scarica per Stampa (PNG)
                                 </button>
-                                <div id="graphDiv" style="width: 100%; height: 600px;">
-                                    {codice_mermaid}
-                                </div>
+                                <div id="graphDiv" style="width: 100%; height: 600px;">{codice_mermaid}</div>
                             </div>
                             <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
                             <script src="https://cdn.jsdelivr.net/npm/svg-pan-zoom@3.6.1/dist/svg-pan-zoom.min.js"></script>
@@ -360,152 +359,43 @@ Scrivi un riassunto discorsivo, chiaro, con le parole chiave in grassetto.
                                     img.onload = function() {{
                                         context.fillStyle = "white"; context.fillRect(0, 0, canvas.width, canvas.height);
                                         context.drawImage(img, 0, 0, canvas.width, canvas.height);
-                                        var pngUrl = canvas.toDataURL("image/png");
-                                        var downloadLink = document.createElement("a");
-                                        downloadLink.href = pngUrl; downloadLink.download = "Schema_IoImparo.png";
-                                        downloadLink.click();
+                                        var a = document.createElement("a");
+                                        a.href = canvas.toDataURL("image/png"); a.download = "Schema_IoImparo.png"; a.click();
                                     }};
                                     img.src = url;
                                 }}
-                            </script>
-                            """
+                            </script>"""
                             st.components.v1.html(html_code, height=650)
                         
                         st.markdown("### 📖 Riassunto Completo")
                         st.markdown(riassunto)
-                        st.balloons()
 
-                    except Exception as e:
-                        st.error(f"Errore: {e}")            
-
-                        # --- Mostra Schema Grafico (CON MOTORE ZOOM 🚀) ---
-                        st.markdown("### 🖼️ Schema Concettuale Visivo")
-                        st.info("💡 **Usa la rotellina del mouse per zoomare** e trascina la mappa per navigare!")
-                        
-                        if codice_mermaid and "graph" in codice_mermaid:
-                            codice_mermaid = codice_mermaid.replace("```mermaid", "").replace("```", "").strip()
-                            
-                            # NUOVO CODICE HTML CON MOTORE ZOOM E TASTO DOWNLOAD PER STAMPA
-                            html_code = f"""
-                            <div id="wrapper" style="width: 100%; background: white; border-radius: 10px; border: 1px solid #ccc; position: relative; font-family: sans-serif;">
-                                <button onclick="downloadSVG()" style="position: absolute; top: 10px; left: 10px; z-index: 100; padding: 8px 12px; background: #4F46E5; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">
-                                    💾 Scarica per Stampa (PNG)
-                                </button>
-                                
-                                <div id="graphDiv" style="width: 100%; height: 600px;">
-                                    {codice_mermaid}
-                                </div>
-                            </div>
-
-                            <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
-                            <script src="https://cdn.jsdelivr.net/npm/svg-pan-zoom@3.6.1/dist/svg-pan-zoom.min.js"></script>
-                            
-                            <script>
-                                mermaid.initialize({{ startOnLoad: true, theme: 'base' }});
-                                
-                                setTimeout(function() {{
-                                    var svgElement = document.querySelector('#graphDiv svg');
-                                    if(svgElement) {{
-                                        svgElement.style.width = '100%';
-                                        svgElement.style.height = '100%';
-                                        svgElement.style.maxWidth = 'none';
-                                        
-                                        // Attiva Zoom e Pan
-                                        window.panZoom = svgPanZoom(svgElement, {{
-                                            zoomEnabled: true,
-                                            controlIconsEnabled: true,
-                                            fit: true,
-                                            center: true
-                                        }});
-                                    }}
-                                }}, 1500);
-
-                                // FUNZIONE MAGICA PER TRASFORMARE LO SCHEMA IN IMMAGINE STAMPABILE
-                                function downloadSVG() {{
-                                    var svg = document.querySelector('#graphDiv svg');
-                                    var serializer = new XMLSerializer();
-                                    var source = serializer.serializeToString(svg);
-                                    
-                                    var canvas = document.createElement('canvas');
-                                    var bbox = svg.getBBox();
-                                    canvas.width = bbox.width * 2; // Raddoppiamo la qualità
-                                    canvas.height = bbox.height * 2;
-                                    
-                                    var context = canvas.getContext('2d');
-                                    var img = new Image();
-                                    var svgBlob = new Blob([source], {{type: 'image/svg+xml;charset=utf-8'}});
-                                    var url = URL.createObjectURL(svgBlob);
-                                    
-                                    img.onload = function() {{
-                                        context.fillStyle = "white"; // Sfondo bianco per la stampa
-                                        context.fillRect(0, 0, canvas.width, canvas.height);
-                                        context.drawImage(img, 0, 0, canvas.width, canvas.height);
-                                        URL.revokeObjectURL(url);
-                                        
-                                        var pngUrl = canvas.toDataURL("image/png");
-                                        var downloadLink = document.createElement("a");
-                                        downloadLink.href = pngUrl;
-                                        downloadLink.download = "Schema_Concettuale_IoImparo.png";
-                                        document.body.appendChild(downloadLink);
-                                        downloadLink.click();
-                                        document.body.removeChild(downloadLink);
-                                    }};
-                                    img.src = url;
-                                }}
-                            </script>
-                            """
-                            st.components.v1.html(html_code, height=650)
-                        else:
-                            st.warning("⚠️ L'IA non è riuscita a trovare uno schema per questo testo.")
-
-                        # Mostra Riassunto
-                        st.markdown("### 📖 Riassunto Completo")
-                        st.markdown(riassunto)
-
-                        # --- 3. IL SALVATAGGIO NEL DATABASE ---
+                        # SALVATAGGIO NEL DATABASE
                         try:
                             supabase.table("appunti_salvati").insert({
                                 "user_id": st.session_state.utente_loggato.id,
                                 "testo_estratto": st.session_state.testo_pulito_studente,
-                                "is_public": is_public,
-                                "titolo": titolo_appunto,
-                                "materia": materia_appunto
+                                "is_public": is_public, "titolo": titolo_appunto, "materia": materia_appunto
                             }).execute()
-                            
-                            if is_public: st.toast("🌍 Salvato e condiviso con la Community!", icon="✅")
-                            else: st.toast("🔒 Salvato nel tuo archivio privato!", icon="✅")
-                            
-                            MAX_APPUNTI_MEMORIA = 25 
-                            res_storico = supabase.table("appunti_salvati").select("id").eq("user_id", st.session_state.utente_loggato.id).eq("is_public", False).order("created_at").execute()
-                            
-                            if len(res_storico.data) > MAX_APPUNTI_MEMORIA:
-                                appunti_da_eliminare = len(res_storico.data) - MAX_APPUNTI_MEMORIA
-                                ids_da_eliminare = [record['id'] for record in res_storico.data[:appunti_da_eliminare]]
-                                for old_id in ids_da_eliminare:
-                                    supabase.table("appunti_salvati").delete().eq("id", old_id).execute()
-                                st.toast(f"🧹 Spazio ottimizzato!", icon="♻️")
-                                    
-                        except Exception as db_e: 
-                            st.error(f"Errore DB: {db_e}")
+                            st.toast("✅ Appunti salvati!", icon="💾")
+                        except: pass
                         
-                       st.balloons()
-                        
-                    except Exception as e:
-                        if "503" in str(e): 
-                            st.warning("⏳ Server Google intasati. Riprova tra poco!")
-                        else: 
-                            st.error(f"Errore Gemini: {e}")
+                        st.balloons()
 
-                # --- ORA IL TASTO DOWNLOAD (ALLINEATO AL BORDO DELLA COLONNA) ---
-                if st.session_state.riassunto_pdf:
-                    st.write("---")
-                    st.download_button(
-                        label="📩 Scarica PDF Completo", 
-                        data=st.session_state.riassunto_pdf, 
-                        file_name="riassunto_ioimparo.pdf", 
-                        mime="application/pdf",
-                        use_container_width=True
-                    )
+                    except Exception as e:
+                        if "503" in str(e): st.warning("⏳ Server Google intasati. Riprova tra poco!")
+                        else: st.error(f"Errore Gemini: {e}")
+
+        # --- TASTO DOWNLOAD (FUORI DALLE LOGICHE DI ERRORE) ---
+        if st.session_state.riassunto_pdf:
+            st.write("---")
+            st.download_button(
+                label="📩 Scarica PDF Completo", 
+                data=st.session_state.riassunto_pdf, 
+                file_name="riassunto_ioimparo.pdf", 
+                mime="application/pdf",
+                use_container_width=True
+            )
 
 with tab2: 
     st.subheader("⚡ Flashcard Visive & Dinamiche")
