@@ -303,9 +303,16 @@ Scrivi un riassunto discorsivo, chiaro, con le parole chiave in grassetto.
                         mappa_pulizia = str.maketrans("àèéìòùÀÈÉÌÒÙ", "aeeiouAEEIOU")
                         codice_mermaid = codice_mermaid.translate(mappa_pulizia).replace("```mermaid", "").replace("```", "").strip()
                         
-                        # 1. Rimuoviamo i caratteri letali per il motore grafico (il browser impazzisce con < e >)
+                        # 1. Rimuoviamo i caratteri letali, ma PROTEGGIAMO LE FRECCE!
                         codice_mermaid = codice_mermaid.replace("(", "-").replace(")", "")
+                        
+                        # Salviamo la freccia mascherandola temporaneamente
+                        codice_mermaid = codice_mermaid.replace("-->", "FRECCIA_SALVA")
+                        # Ora possiamo convertire i simboli matematici innocuamente
                         codice_mermaid = codice_mermaid.replace("<", " min ").replace(">", " mag ")
+                        # E infine ripristiniamo le nostre frecce intatte
+                        codice_mermaid = codice_mermaid.replace("FRECCIA_SALVA", "-->")
+                        
                         codice_mermaid = codice_mermaid.replace(";", "") # Via i punti e virgola inutili
                         
                         # 2. Isoliamo la testa del grafico (garantiamo che graph TD sia da solo)
