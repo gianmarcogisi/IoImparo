@@ -178,11 +178,11 @@ with tab1:
         tipo_file = st.radio("Formato:", ["📄 PDF", "📸 Foto"], horizontal=True)
         
         is_foto = (tipo_file == "📸 Foto")
-        # --- SEPARAZIONE CANALI CON NUOVI LIMITI PDF ---
+        # --- SEPARAZIONE CANALI ---
         if is_foto:
             file_input = st.file_uploader(
                 "Scegli le foto degli appunti (Max 150)", 
-                type=['png', 'jpg', 'jpeg', 'webp', 'heic'], 
+                # ABBIAMO RIMOSSO LA RIGA 'type' PER SBLOCCARE ANDROID
                 accept_multiple_files=True, 
                 key="canale_foto_multiplo"
             )
@@ -190,7 +190,7 @@ with tab1:
             file_input = st.file_uploader(
                 "Scegli i file PDF (Max 5)", 
                 type=['pdf'], 
-                accept_multiple_files=True, # Ora accettiamo più file!
+                accept_multiple_files=True, 
                 key="canale_pdf_multiplo"
             )
         # -----------------------------------------------
