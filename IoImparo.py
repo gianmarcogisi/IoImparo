@@ -422,15 +422,37 @@ with tab2:
         with col_f1: num_cards = st.slider("Numero carte:", 5, 30, 10)
         with col_f2:
             st.write("")
-            if st.button("Genera Mazzo 🃏", type="primary", use_container_width=True):
-                with st.spinner("L'IA sta disegnando..."):
-                    prompt_f = f"Agisci come un prof. Crea {num_cards} flashcard JSON: [{{'domanda': '...', 'tipo_visuale': 'molecola/immagine/nessuno', 'query_visuale': 'inglese_breve', 'risposta': '...'}}]. Testo: {testo_f2}"
+            if st.button("Genera Mazzo Visivo 🃏", type="primary", use_container_width=True, key="cards_gen_btn"):
+                with st.spinner(f"⏳ Il Prof. Gemini sta studiando '{scelta_titolo.split('|')[0]}' per te..."):
+                    
+                    prompt_flash = "Agisci come professore. Crea " + str(num_cards) + """ flashcard in formato JSON ESATTO. 
+Nessun blocco markdown, nessuna chiacchiera, solo l'array puro.
+Struttura: [{"domanda": "...", "tipo_visuale": "molecola", "query_visuale": "paracetamol", "risposta": "..."}]
+Tipi visuali permessi: "molecola", "immagine", "nessuno".
+Testo da usare: """ + testo_f2
+
                     try:
-                        res = client.models.generate_content(model='gemini-2.5-flash', contents=prompt_f)
-                        st.session_state.flashcards = json.loads(res.text.replace("```json", "").replace("```", "").strip())
-                        st.session_state.indice_flashcard = 0
-                        st.rerun()
-                    except: st.error("Errore generazione JSON.")
+                        res = client.models.generate_content(model='gemini-2.5-flash', contents=prompt_flash)
+                        testo = res.text
+                        
+                        inizio = testo.find('[')
+                        fine = testo.rfind(']') + 1
+                        
+                        if inizio == -1 or fine <= 0:
+                            st.error("L'IA non ha generato un array JSON.")
+                            st.code(testo) # Stampiamo la risposta grezza!
+                        else:
+                            st.session_state.flashcards = json.loads(testo[inizio:fine])
+                            st.session_state.indice_flashcard = 0
+                            st.rerun()
+                            
+                    except Exception as e:
+                        st.error(f"Errore tecnico IA: {str(e)}")
+                        try:
+                            st.warning("Risposta grezza ricevuta:")
+                            st.write(res.text)
+                        except:
+                            st.warning("Nessun testo ricevuto (Probabile blocco dei filtri di sicurezza sui farmaci!).")
 
         if st.session_state.flashcards:
             idx = st.session_state.indice_flashcard
@@ -521,6 +543,8 @@ with tab3:
                     time.sleep(5)
                     st.rerun()
 
+# --- FASE 4 DEVE STARE TUTTO A SINISTRA (ZERO SPAZI) ---
+with tab4:
     st.subheader("🧪 Arena di Farmacia")
 
     if "id_sfida_attiva" not in st.session_state:
@@ -928,4 +952,5 @@ with tab7:
                 )
     else:
         st.info("Il tuo archivio privato è ancora vuoto. Elabora un PDF nella Fase 1 e salvalo come Privato!")
+
 
