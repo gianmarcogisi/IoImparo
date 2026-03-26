@@ -464,15 +464,22 @@ Testo da usare: """ + testo_f2
                 
                 import urllib.parse
                 t_v = carta.get('tipo_visuale')
-                q_v_raw = str(carta.get('query_visuale', ''))
-                q_v = urllib.parse.quote(q_v_raw)
                 
-                if t_v == 'molecola' and q_v:
+                # Igiene di base: togliamo gli spazi bianchi all'inizio e alla fine generati per sbaglio
+                q_v_raw = str(carta.get('query_visuale', '')).strip()
+                
+                if t_v == 'molecola' and q_v_raw:
+                    # PubChem vuole solo il nome nudo e crudo codificato
+                    q_v = urllib.parse.quote(q_v_raw)
                     url = f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/{q_v}/PNG"
                     st.image(url, width=300, caption="Struttura chimica (Riconoscila!)")
-                elif t_v == 'immagine' and q_v:
-                    # Query pulita per evitare il simbolo rotto (🖼️0)
-                    url = f"https://image.pollinations.ai/prompt/{q_v}_scientific_illustration_clean_background?width=512&height=512&nologo=true"
+                    
+                elif t_v == 'immagine' and q_v_raw:
+                    # Per Pollinations creiamo una frase vera e pulita, POI codifichiamo tutto il pacchetto
+                    frase_prompt = f"{q_v_raw} scientific concept illustration clean background"
+                    q_v_completo = urllib.parse.quote(frase_prompt)
+                    
+                    url = f"https://image.pollinations.ai/prompt/{q_v_completo}?width=512&height=512&nologo=true"
                     st.image(url, width=400, caption="Rappresentazione concettuale")
 
                 with st.expander("Gira la Carta 🔄"):
