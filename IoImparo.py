@@ -491,11 +491,21 @@ Scrivi un riassunto discorsivo, chiaro, con le parole chiave in grassetto.
                         st.balloons()
                         
                     except Exception as e:
-                        if "503" in str(e): st.warning("⏳ Server Google intasati. Riprova tra poco!")
-                        else: st.error(f"Errore Gemini: {e}")
-        
-                        if st.session_state.riassunto_pdf:
-                        st.download_button("📩 Scarica PDF", data=st.session_state.riassunto_pdf, file_name="riassunto.pdf", mime="application/pdf")
+                        if "503" in str(e): 
+                            st.warning("⏳ Server Google intasati. Riprova tra poco!")
+                        else: 
+                            st.error(f"Errore Gemini: {e}")
+
+        # --- IL TASTO DOWNLOAD VA QUI (FUORI DAI BLOCCHI SOPRA MA DENTRO COL2) ---
+        if st.session_state.riassunto_pdf:
+            st.download_button(
+                label="📩 Scarica PDF Completo", 
+                data=st.session_state.riassunto_pdf, 
+                file_name="riassunto_ioimparo.pdf", 
+                mime="application/pdf",
+                use_container_width=True
+            )
+
 with tab2:
     st.subheader("⚡ Flashcard Visive & Dinamiche")
     
