@@ -282,16 +282,17 @@ Dividi la risposta ESATTAMENTE usando questi tag:
 
 [SCHEMA]
 Genera ESCLUSIVAMENTE codice Mermaid.js valido (formato graph TD).
-REGOLE TASSATIVE PER L'ESTETICA E LA STABILITÀ:
-1. Sviluppa la mappa in VERTICALE (in profondità). NON collegare MAI più di 2 frecce allo stesso nodo padre per evitare che si allarghi troppo a dismisura.
-2. Inserisci una PICCOLA DESCRIZIONE in ogni nodo usando SEMPRE questa sintassi esatta con le virgolette: A["Titolo Concetto: breve spiegazione di 10-15 parole max"] --> B["Altro Titolo: altra piccola descrizione"]
-3. NON inserire MAI altre virgolette doppie, apici o parentesi tonde *all'interno* del testo dei nodi, altrimenti il grafico va in crash.
-4. Vai SEMPRE a capo dopo ogni freccia.
-5. Sei un professoree severo ma SIMPATICO di Farmacia.
+REGOLE TASSATIVE ANTI-CRASH (SE SBAGLI IL GRAFICO SARÀ BIANCO):
+1. Sviluppa in VERTICALE. Max 2 frecce per nodo padre.
+2. Usa questa sintassi esatta: A["Titolo: breve spiegazione"] --> B["Titolo: breve spiegazione"]
+3. VIETATO ANDARE A CAPO all'interno delle parentesi quadre ["..."]. Il testo della descrizione deve stare tutto su una singola riga!
+4. VIETATO usare altre virgolette doppie ("), apici (') o parentesi tonde dentro le descrizioni. Usa solo testo semplice.
+5. Vai a capo SOLO dopo aver completato l'intero collegamento della freccia.
+6. Impersoni un professore di Farmacia Severo ma simpatico.
 [/SCHEMA]
 
 [RIASSUNTO]
-Scrivi un riassunto discorsivo, chiaro, lungo con le parole chiave in grassetto.
+Scrivi un riassunto discorsivo, chiaro, con le parole chiave in grassetto.
 [/RIASSUNTO]"""]
                         
                         # 3. AGGIUNGIAMO I FILE CARICATI ALLA VARIABILE "contenuti"
@@ -553,7 +554,8 @@ Regole ferree della simulazione:
 2. Aspetta la risposta dello studente prima di proseguire.
 3. Valuta la sua risposta: se è giusta fagli i complimenti, se è sbagliata correggilo spiegando il perché.
 4. Subito dopo il feedback, fagli un'altra domanda su un argomento diverso dello stesso testo.
-5. Usa un tono accademico, professionale ma empatico."""
+5. Impersoni un professore di Farmacia Severo ma simpatico.
+6. Usa un tono accademico, professionale ma empatico."""
                     
                     try:
                         # Chiama la funzione magica che abbiamo definito in cima al file
@@ -741,7 +743,7 @@ Testo: {str(testo_arena)[:3000]}"""
                                 prompt_voto = f"""Valuta questa risposta: '{risposta}'. 
 Domanda: '{d['domanda']}'. 
 Appunti: {sfida['appunti_testo'][:2000]}.
-REGOLE: Scrivi un commento sarcastico alla Dr. House. Poi vai a capo e scrivi esattamente "VOTO: X" (dove X è un numero da 1 a 30)."""
+REGOLE: Scrivi un commento sarcastico alla Dr. House. Ricorda di impersonare un professore di Farmacia Poi vai a capo e scrivi esattamente "VOTO: X" (dove X è un numero da 1 a 30)."""
                                 try:
                                     risposta_prof = genera_testo_gemini(prompt_voto).strip()
                                     
