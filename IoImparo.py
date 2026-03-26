@@ -404,59 +404,110 @@ Scrivi un riassunto discorsivo, chiaro, lungo con le parole chiave in grassetto.
         if st.session_state.riassunto_pdf:
             st.download_button("📩 Scarica PDF", data=st.session_state.riassunto_pdf, file_name="riassunto.pdf", mime="application/pdf")
 with tab2:
-    if st.session_state.testo_pulito_studente:
-        if st.button("Genera Flashcard 🚀"):
-            with st.spinner("🧠 Sto frullando gli appunti per creare le tue Flashcard magiche... Scalda il cervello!"):
-                try:
-                    testo_flashcard = genera_testo_gemini(f"Crea 5 flashcard domanda/risposta da qui: {st.session_state.testo_pulito_studente}")
-                    st.info(testo_flashcard)
-                except Exception as e: st.error(f"Errore generazione: {e}")
-    else: st.warning("Carica prima qualcosa in Fase 1!")
+    st.subheader("⚡ Flashcard Visive & Dinamiche")
+    
+    # Inizializzazione variabili di memoria per le carte
+    if "flashcards" not in st.session_state: st.session_state.flashcards = []
+    if "indice_flashcard" not in st.session_state: st.session_state.indice_flashcard = 0
+    
+    if not st.session_state.testo_pulito_studente:
+        st.warning("⚠️ Vai prima nella Fase 1 e 'Spremi gli Appunti' per poter generare le tue carte!")
+    else:
+        col_f1, col_f2 = st.columns([2, 1])
+        with col_f1:
+            num_cards = st.slider("Quante Flashcard vuoi generare?", min_value=5, max_value=30, value=10)
+        with col_f2:
+            st.write("")
+            st.write("")
+            if st.button("Genera Mazzo Visivo 🃏", type="primary", use_container_width=True):
+                with st.spinner("⏳ Il Prof. Gemini sta disegnando e scrivendo le tue carte..."):
+                    
+                    # PROMPT JSON BLINDATO PER AVERE IMMAGINI E TESTO
+                    prompt_flash = f"""Agisci come il miglior professore di farmacia/medicina. 
+Estrai {num_cards} concetti chiave dal testo fornito e crea delle flashcard.
+Devi restituire ESATTAMENTE E SOLO un array JSON valido, senza nient'altro.
 
-with tab3:
-    if st.session_state.testo_pulito_studente:
-        st.markdown("Scrivi **'Iniziamo'** per far partire l'interrogazione.")
-        for m in st.session_state.messaggi_chat:
-            with st.chat_message(m["ruolo"]): st.markdown(m["contenuto"])
-        
-        inp = st.chat_input("Rispondi al prof... (Max 500 caratteri)", max_chars=500)
-        if inp:
-            st.chat_message("user").markdown(inp)
-            st.session_state.messaggi_chat.append({"ruolo": "user", "contenuto": inp})
-            
-            system_prompt = f"""Sei il Prof. Dr. House, docente universitario di Farmacia/Medicina. Sei geniale, cinico, incredibilmente sarcastico e non sopporti l'ignoranza. Sotto sotto vuoi che gli studenti imparino, ma li tratti con affettuoso disprezzo.
-Devi interrogare lo studente basandoti ESCLUSIVAMENTE su questi appunti:
-{st.session_state.testo_pulito_studente[:3000]}
+Regole per il campo "tipo_visuale":
+- Scrivi "molecola" se la domanda riguarda un principio attivo, un farmaco o una molecola chimica.
+- Scrivi "immagine" se riguarda anatomia, strumenti di laboratorio, o oggetti fisici.
+- Scrivi "nessuno" se è un concetto puramente teorico o legislativo.
 
-REGOLE TASSATIVE (Se le violi, sei licenziato):
-1. Fai UNA SOLA DOMANDA alla volta e aspetta la risposta.
-2. Quando lo studente risponde:
-   - Valuta la sua risposta sfoggiando tutto il tuo sarcasmo.
-   - Dagli un voto in trentesimi (es. 28/30 se è bravo, 1/30 se dice fesserie).
-   - Correggi i suoi errori usando SEMPRE la "Lavagna Visiva" (Usa il Markdown per disegnare una Tabella, uno schema ad albero o un elenco puntato).
-3. Finita la correzione, fagli SUBITO una nuova domanda sul testo."""
+Regole per il campo "query_visuale":
+- Se tipo è "molecola", scrivi SOLO IL NOME IN INGLESE della molecola (es. "paracetamol", "ibuprofen", "benzene").
+- Se tipo è "immagine", scrivi una brevissima parola chiave in inglese (es. "heart anatomy", "microscope").
+- Se tipo è "nessuno", lascia vuoto "".
+
+STRUTTURA JSON OBBLIGATORIA:
+[
+  {{
+    "domanda": "Cos'è questa molecola? (oppure scrivi la domanda teorica)",
+    "tipo_visuale": "molecola",
+    "query_visuale": "paracetamol",
+    "risposta": "È il Paracetamolo, usato come analgesico e antipiretico."
+  }}
+]
+
+TESTO DEGLI APPUNTI:
+{st.session_state.testo_pulito_studente}"""
+
+                    try:
+                        res = client.models.generate_content(model='gemini-2.5-flash', contents=prompt_flash)
+                        # Pulizia stringa per estrarre solo il JSON puro
+                        testo_json = res.text.replace("```json", "").replace("```", "").strip()
+                        st.session_state.flashcards = json.loads(testo_json)
+                        st.session_state.indice_flashcard = 0
+                        st.rerun() # Ricarica per mostrare subito la prima carta
+                    except Exception as e:
+                        st.error(f"Errore nella generazione delle carte. L'IA ha fatto confusione. Riprova! (Dettaglio: {e})")
+
+        # --- MOTORE DI VISUALIZZAZIONE DELLE CARTE ---
+        if st.session_state.flashcards:
+            carte = st.session_state.flashcards
+            idx = st.session_state.indice_flashcard
             
-            try:
-                # --- LO SPINNER DEL PROFESSORE ---
-                with st.spinner("🧑‍🏫 Il Prof sta affilando il sarcasmo... Trema!"):
-                    # Chiamata a Gemini
-                    risposta_prof = chat_professore_gemini(system_prompt, st.session_state.messaggi_chat)
+            if idx < len(carte):
+                carta = carte[idx]
                 
-                # 1. MOSTRA SUBITO LA RISPOSTA (così puoi leggerla durante la pausa)
-                with st.chat_message("assistant"): 
-                    st.markdown(risposta_prof)
+                st.markdown("---")
+                st.markdown(f"### 🃏 Carta {idx + 1} di {len(carte)}")
                 
-                # 2. AGGIUNGIAMO LA RISPOSTA ALLO STORICO
-                st.session_state.messaggi_chat.append({"ruolo": "assistant", "contenuto": risposta_prof})
+                # IL FRONTE DELLA CARTA (Domanda + Immagine)
+                with st.container(border=True):
+                    st.markdown(f"#### ❓ {carta['domanda']}")
+                    
+                    # Magia Visiva: Peschiamo le immagini dai database mondiali!
+                    if carta.get('tipo_visuale') == 'molecola':
+                        # API ufficiale di PubChem per le strutture chimiche
+                        img_url = f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/{carta['query_visuale']}/PNG"
+                        st.image(img_url, width=300, caption="Struttura Chimica Ufficiale")
+                    
+                    elif carta.get('tipo_visuale') == 'immagine':
+                        # API di Pollinations per generare un'immagine di contesto
+                        query_pulita = str(carta['query_visuale']).replace(' ', '_')
+                        img_url = f"https://image.pollinations.ai/prompt/{query_pulita}?width=400&height=300&nologo=true"
+                        st.image(img_url, width=400, caption="Rappresentazione Visiva")
                 
-                # --- 3. LA PAUSA TATTICA DI 5 SECONDI ---
-                # Usiamo una caption per avvisarti
-                st.caption("⏱️ *Il Prof ti concede 5 secondi per assaporare la sua saggezza (e il suo sarcasmo) prima della prossima domanda...*")
-                time.sleep(5) # Aspetta 5 secondi reali
-                # ----------------------------------------
+                # IL RETRO DELLA CARTA (Risposta Nascosta)
+                with st.expander("Gira la Carta 🔄"):
+                    st.success(f"**💡 Risposta:** {carta['risposta']}")
                 
-                # 4. ORA RICARICHIAMO LA PAGINA
-                st.rerun()
+                st.write("")
+                
+                # PULSANTI DI NAVIGAZIONE
+                col_btn1, col_btn2, col_btn3 = st.columns([1, 2, 1])
+                with col_btn1:
+                    if st.button("⬅️ Precedente", use_container_width=True, disabled=(idx == 0)):
+                        st.session_state.indice_flashcard -= 1
+                        st.rerun()
+                with col_btn3:
+                    if st.button("Prossima ➡️", use_container_width=True, disabled=(idx == len(carte) - 1)):
+                        st.session_state.indice_flashcard += 1
+                        st.rerun()
+            else:
+                st.success("🎉 Complimenti! Hai completato tutto il mazzo di appunti. Sei pronto per l'esame!")
+                if st.button("Ricomincia da capo 🔄"):
+                    st.session_state.indice_flashcard = 0
+                    st.rerun()
                 
             except Exception as e: 
                 st.error(f"Errore Chat: {e}")
