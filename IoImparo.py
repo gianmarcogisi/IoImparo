@@ -295,7 +295,7 @@ Dividi la risposta ESATTAMENTE usando questi tag:
 Genera ESCLUSIVAMENTE codice Mermaid.js valido (formato graph TD).
 Devi creare una VERA mappa concettuale inserendo SEMPRE un'etichetta di testo sulle frecce che spieghi la relazione tra i due nodi.
 REGOLE TASSATIVE (PENA IL FALLIMENTO DEL SISTEMA):
-1. MAX 75 NODI totali. Estrai solo i concetti cardine.
+1. MAX 30 NODI totali. Estrai solo i concetti cardine.
 2. Usa ESATTAMENTE questa sintassi per mettere il testo sulla freccia: A["Concetto Padre"] -->|verbo o relazione| B["Concetto Figlio"];
 3. DEVI OBBLIGATORIAMENTE andare a capo e mettere il PUNTO E VIRGOLA (;) alla fine di ogni singolo collegamento.
 4. Sviluppa in VERTICALE. Max 2 o 3 frecce per nodo padre.
