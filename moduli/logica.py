@@ -22,3 +22,10 @@ def calcola_esito_arena(is_host, sfida):
     col_punti = "punteggio_host" if is_host else "punteggio_guest"
     col_risposte = "risposte_host" if is_host else "risposte_guest"
     return col_punti, col_risposte
+def calcola_punti_arena(is_host, sfida):
+    """Restituisce le chiavi corrette per aggiornare i punteggi nell'Arena."""
+    col_punti = "punteggio_host" if is_host else "punteggio_guest"
+    col_risposte = "risposte_host" if is_host else "risposte_guest"
+    mio_ping = "last_ping_host" if is_host else "last_ping_guest"
+    suo_ping = "last_ping_guest" if is_host else "last_ping_host"
+    return col_punti, col_risposte, mio_ping, suo_ping
