@@ -234,8 +234,8 @@ with tab2:
                     prompt_flash = get_prompt_flashcards(num_cards, testo_f2)
 
                     try:
-                        res = client.models.generate_content(model='gemini-2.5-flash', contents=prompt_flash)
-                        testo = res.text
+                        # FIX: Usiamo la funzione del nostro modulo, non il 'client' diretto!
+                        testo = genera_testo_gemini([prompt_flash])
                         
                         inizio = testo.find('[')
                         fine = testo.rfind(']') + 1
