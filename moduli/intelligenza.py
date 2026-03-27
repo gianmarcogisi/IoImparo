@@ -44,15 +44,20 @@ def chat_professore_gemini(system_prompt, messaggi_chat):
         return "Errore di connessione con il Professore."
 
 def pulisci_codice_mermaid(codice):
-    """PULIZIA BLINDATA ANTI-BOMBA."""
+    """PULIZIA INTELLIGENTE: Rimuove i pericoli ma salva Colori e Testi sulle frecce."""
     c = codice.replace("```mermaid", "").replace("```", "").strip()
     mappa_pulizia = str.maketrans("àèéìòùÀÈÉÌÒÙ", "aeeiouAEEIOU")
     c = c.translate(mappa_pulizia)
     
+    # Salviamo le frecce prima di pulire
     c = c.replace("-->", "FRECCIA_SALVA")
+    
+    # Rimuoviamo SOLO i caratteri che rompono i testi nei nodi, 
+    # ma LASCIAMO i due punti (:) e il punto e virgola (;) che servono per i colori!
     c = c.replace('"', " ").replace("'", " ").replace("(", " ").replace(")", " ")
-    c = c.replace(":", " ").replace(";", " ").replace("<", " ").replace(">", " ")
-    c = c.replace("{", " ").replace("}", " ").replace("*", " ")
+    c = c.replace("<", " ").replace(">", " ").replace("{", " ").replace("}", " ").replace("*", " ")
+    
+    # Ripristiniamo le frecce
     c = c.replace("FRECCIA_SALVA", "-->")
     
     if not c.startswith("graph TD"):
@@ -99,12 +104,12 @@ Devi estrarre e riscrivere OGNI SINGOLO DETTAGLIO. Crea un testo lunghissimo ed 
 
 [SCHEMA]
 Genera codice Mermaid.js valido (graph TD).
-REGOLE ANTI-CRASH E DI PROPORZIONE:
-1. Usa SOLO lettere, numeri e spazi dentro le parentesi quadre. Esempio: A[Farmacologia Generale] --> B[Farmacocinetica]
-2. DIVIETO ASSOLUTO DI USARE questi caratteri nei nodi: : ; ' " ( ) [ ] {{ }} *
-3. STRUTTURA AD ALBERO PROFONDO: Ogni nodo padre DEVE avere AL MASSIMO 3 nodi figli. È severamente vietato collegare più di 3 frecce allo stesso blocco.
-4. RAGGRUPPAMENTO: Se hai 10 concetti, NON collegarli tutti al titolo principale. Inventa dei nodi intermedi (es. A[Principale] --> B[Fase 1]; A --> C[Fase 2]; B --> D[Dettaglio 1]; B --> E[Dettaglio 2]). Sviluppa verso il basso, non verso i lati.
-5. COLORI E COLLEGAMENTI: Colora concetti attinenti con lo stesso colore, nello schema usa almeno 4 colori diversi e inserisci una parola o un messaggio di massimo 3 parole di collegamento tra i nodi (es.A) La farmacologia B)studia le interazioni C)Tra i farmaci
+REGOLE TASSATIVE PER NON FAR CRASHARE IL SISTEMA E PER IL DESIGN:
+1. Usa SOLO lettere, numeri e spazi dentro le parentesi quadre dei nodi. Esempio: A[Farmacologia Generale]
+2. DIVIETO ASSOLUTO DI USARE questi caratteri nei titoli dei nodi: ' " ( ) [ ] {{ }} * < >
+3. GERARCHIA PROFONDA: Non creare schemi piatti e larghi. Non collegare MAI più di 3 o 4 nodi allo stesso padre! Crea macro-categorie e sotto-categorie sviluppando l'albero verso il basso (es. A --> B; A --> C; B --> D; B --> E).
+4. TESTI SUI COLLEGAMENTI: Inserisci una parola o un breve messaggio di collegamento tra i nodi usando ESATTAMENTE questa sintassi con la barra verticale: A -->|studia le interazioni| B
+5. COLORI: Colora i concetti attinenti usando lo stesso colore. Usa almeno 4 colori diversi aggiungendo queste righe alla fine del codice (usa ESATTAMENTE questa sintassi CSS): style A fill:#ffccdd
 [/SCHEMA]
 
 [RIASSUNTO]
