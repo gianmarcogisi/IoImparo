@@ -14,7 +14,7 @@ def genera_testo_gemini(prompt_list):
     attesa = 2
     for tentativo in range(max_tentativi):
         try:
-            time.sleep(1) # Piccolo respiro preventivo
+            time.sleep(1) 
             response = client.models.generate_content(
                 model='gemini-2.5-flash', 
                 contents=prompt_list
@@ -45,26 +45,32 @@ def chat_professore_gemini(system_prompt, messaggi_chat):
 
 def pulisci_codice_mermaid(codice):
     """
-    Pulizia ESTREMA del codice Mermaid per evitare che la scatola rimanga bianca.
+    PULIZIA BLINDATA ANTI-BOMBA: Rimuove tutto ciò che fa crashare Mermaid.
     """
-    # 1. Rimuove accenti e tag markdown
+    c = codice.replace("```mermaid", "").replace("```", "").strip()
+    
+    # Mappa per rimuovere gli accenti
     mappa_pulizia = str.maketrans("àèéìòùÀÈÉÌÒÙ", "aeeiouAEEIOU")
-    c = codice.translate(mappa_pulizia).replace("```mermaid", "").replace("```", "").strip()
+    c = c.translate(mappa_pulizia)
     
-    # 2. Rimuove caratteri che fanno crashare il renderer Javascript
-    c = c.replace("(", "-").replace(")", "")
-    c = c.replace("<", " min ").replace(">", " mag ")
-    c = c.replace(";", "")
-    c = c.replace('"', "") # Via le virgolette doppie
-    c = c.replace("'", "") # Via gli apostrofi (killer numero 1 di Mermaid)
+    # Salviamo le frecce prima di pulire il resto
+    c = c.replace("-->", "FRECCIA_SALVA")
     
-    # 3. Formattazione spazi e righe
-    c = re.sub(r'\n+', '\n', c)
+    # DISTRUZIONE CARATTERI VIETATI (Inclusi i due punti e gli asterischi!)
+    c = c.replace('"', " ").replace("'", " ").replace("(", " ").replace(")", " ")
+    c = c.replace(":", " ").replace(";", " ").replace("<", " ").replace(">", " ")
+    c = c.replace("{", " ").replace("}", " ").replace("*", " ")
     
-    # 4. Assicurazione sulla vita: deve sempre iniziare con graph TD
+    # Ripristiniamo le frecce
+    c = c.replace("FRECCIA_SALVA", "-->")
+    
+    # Assicuriamoci che inizi in modo corretto
     if not c.startswith("graph TD"):
         c = "graph TD\n" + c
         
+    # Pulizia spazi vuoti extra
+    c = re.sub(r'\n+', '\n', c)
+    
     return c
 
 def cerca_immagine_scientifica(tipo_visuale, query_visuale):
@@ -92,10 +98,10 @@ def cerca_immagine_scientifica(tipo_visuale, query_visuale):
     q_v_ai = urllib.parse.quote(frase_prompt)
     return f"https://image.pollinations.ai/prompt/{q_v_ai}?width=512&height=512&nologo=true"
 
-# --- ARMERIA DEI PROMPT (POTENZIATI PER LA LUNGHEZZA E LA SICUREZZA) ---
+# --- ARMERIA DEI PROMPT ---
 
 def get_prompt_mappa(istruzioni_trascrizione):
-    return f"""Agisci come il miglior professore e assistente universitario del mondo. 
+    return f"""Agisci come il miglior professore universitario. 
 Dividi la risposta ESATTAMENTE usando questi tag:
 
 [TRASCRIZIONE]
@@ -104,16 +110,15 @@ Devi estrarre e riscrivere OGNI SINGOLO DETTAGLIO. Crea un testo lunghissimo ed 
 [/TRASCRIZIONE]
 
 [SCHEMA]
-Genera ESCLUSIVAMENTE codice Mermaid.js valido.
-REGOLE FONDAMENTALI:
-1. Inizia SEMPRE con: graph TD
-2. Usa solo nodi con parentesi quadre. Esempio: A[Titolo] --> B[Sottotitolo]
-3. DIVIETO ASSOLUTO DI USARE: accenti, apostrofi, virgolette, parentesi tonde.
-4. Genera una mappa complessa con almeno 15-20 nodi.
+Genera codice Mermaid.js valido (graph TD).
+REGOLE ANTI-CRASH (SEVERISSIME):
+1. Usa SOLO lettere, numeri e spazi dentro le parentesi quadre. Esempio: A[Farmacologia Generale] --> B[Farmacocinetica]
+2. DIVIETO ASSOLUTO DI USARE questi caratteri nei nodi: : ; ' " ( ) [ ] {{ }} *
+3. Niente punteggiatura nei titoli dei nodi.
 [/SCHEMA]
 
 [RIASSUNTO]
-Scrivi un riassunto discorsivo ESTREMAMENTE LUNGO, completo e dettagliato. Non omettere nessuna informazione vitale. Usa il grassetto per le parole chiave.
+Scrivi un riassunto discorsivo ESTREMAMENTE LUNGO, completo e dettagliato. Non omettere nulla. Usa il grassetto per le parole chiave.
 [/RIASSUNTO]"""
 
 def get_prompt_flashcards(num_cards, testo_appunti):
