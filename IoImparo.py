@@ -200,7 +200,6 @@ with tab1:
             pdf_bytes = genera_pdf_scaricabile(trascrizione, codice_mermaid, riassunto)
             st.download_button("📩 Scarica PDF Elaborato", data=pdf_bytes, file_name=f"{titolo_appunto}.pdf", mime="application/pdf", use_container_width=True)
 
-
 # ==========================================
 # FASE 2: FLASHCARD
 # ==========================================
@@ -231,17 +230,21 @@ with tab2:
             st.write("")
             if st.button("Genera Mazzo Visivo 🃏", type="primary", use_container_width=True, key="cards_gen_btn"):
                 with st.spinner(f"⏳ Il Prof. Gemini sta studiando '{scelta_titolo.split('|')[0]}' per te..."):
-                    prompt_flash = [get_prompt_flashcards(num_cards, testo_f2)]
+                    
+                    prompt_flash = get_prompt_flashcards(num_cards, testo_f2)
+
                     try:
-                        raw = genera_testo_gemini(prompt_flash)
-                        inizio = raw.find('[')
-                        fine = raw.rfind(']') + 1
+                        res = client.models.generate_content(model='gemini-2.5-flash', contents=prompt_flash)
+                        testo = res.text
+                        
+                        inizio = testo.find('[')
+                        fine = testo.rfind(']') + 1
                         
                         if inizio == -1 or fine <= 0:
                             st.error("L'IA non ha generato un array JSON.")
-                            st.code(raw)
+                            st.code(testo)
                         else:
-                            st.session_state.flashcards = json.loads(raw[inizio:fine])
+                            st.session_state.flashcards = json.loads(testo[inizio:fine])
                             st.session_state.indice_flashcard = 0
                             st.rerun()
                             
@@ -256,17 +259,14 @@ with tab2:
                 st.write(f"### Carta {idx+1} di {len(st.session_state.flashcards)}")
                 st.markdown(f"#### ❓ {carta.get('domanda')}")
                 
-                # --- CHIAMATA AL MOTORE IMMAGINI DEL MODULO ---
-                t_v = carta.get('tipo_visuale')
                 q_v_raw = str(carta.get('nome_molecola_inglese_pubchem', carta.get('query_visuale', ''))).strip()
+                img_url = cerca_immagine_scientifica(carta.get('tipo_visuale'), q_v_raw)
+                if img_url: st.image(img_url, width=400)
                 
-                img_url = cerca_immagine_scientifica(t_v, q_v_raw)
-                if img_url:
-                    st.image(img_url, width=400)
-
                 with st.expander("Gira la Carta 🔄"):
                     if q_v_raw:
                         st.info(f"🧪 **Soggetto:** {q_v_raw}")
+                    
                     st.success(f"**Risposta:** {carta.get('risposta')}")
 
             c1, c2, c3 = st.columns(3)
@@ -276,7 +276,6 @@ with tab2:
             if c3.button("➡️", disabled=idx==len(st.session_state.flashcards)-1):
                 st.session_state.indice_flashcard += 1
                 st.rerun()
-
 
 # ==========================================
 # FASE 3: ESAME ORALE
@@ -322,11 +321,11 @@ with tab3:
                         sys_p = get_prompt_esame(opzioni_esame[scelta_e])
                         r_prof = chat_professore_gemini(sys_p, st.session_state.messaggi_chat)    
                         
-                        # --- LOGICA DEL MODULO ---
                         voto = gestisci_voto_esame(r_prof)
                         
                         if voto > 0:
                             if st.session_state.esame_bocciato:
+                                st.session_state.esame_bocciato = True
                                 msg_bocciato = f"🔴 VOTO: {voto}/30. Quarto errore totale. La sua preparazione fa acqua da tutte le parti. Prenda il suo libretto, è **BOCCIATO**. E chiuda la porta uscendo!"
                                 st.error(msg_bocciato)
                                 st.session_state.messaggi_chat.append({"ruolo": "assistant", "contenuto": msg_bocciato})
@@ -337,12 +336,9 @@ with tab3:
                                 nuova_d = r_prof.split(str(voto))[1] if str(voto) in r_prof else ""
 
                                 st.markdown(commento)
-                                if 1 <= voto <= 11: 
-                                    st.error(f"🔴 VOTO: {voto}/30 - Disastroso. (Errori accumulati: {st.session_state.errori_totali}/4)")
-                                elif 12 <= voto <= 17: 
-                                    st.warning(f"🟡 VOTO: {voto}/30 - Mediocre. (Errori accumulati: {st.session_state.errori_totali}/4)")
-                                elif voto >= 18: 
-                                    st.success(f"🟢 VOTO: {voto}/30 - Accettabile. Ma il libretto ricorda le sue lacune. (Errori accumulati: {st.session_state.errori_totali}/4)")
+                                if voto < 18: st.error(f"🔴 VOTO: {voto}/30 - Insufficiente!")
+                                elif voto < 24: st.warning(f"🟡 VOTO: {voto}/30 - Poteva fare di meglio.")
+                                else: st.success(f"🟢 VOTO: {voto}/30 - Eccellente!")
                                 
                                 st.markdown(f"**Prossima Domanda:** {nuova_d}")
                                 st.session_state.messaggi_chat.append({"ruolo": "assistant", "contenuto": r_prof})
@@ -356,7 +352,6 @@ with tab3:
                             st.rerun()
         else:
             st.error("❌ ESAME FALLITO. Il professore ti ha bocciato. Ripresentati al prossimo appello (Premi 'Reset Esame').")
-
 
 # ==========================================
 # FASE 4: ARENA FARMACIA
@@ -398,7 +393,8 @@ Rispondi SOLO ed ESCLUSIVAMENTE con un array JSON avente questa struttura esatta
   {{"tipo": "multipla", "domanda": "...", "opzioni": ["A", "B", "C", "D"], "corretta": "A"}},
   {{"tipo": "aperta", "domanda": "..."}}
 ]
-Devono essere 10 elementi in totale. Testo: {str(testo_arena)[:3000]}"""
+Devono essere 10 elementi in totale (5 multipla, 5 aperta). Nessun testo prima o dopo l'array JSON.
+Testo: {str(testo_arena)[:3000]}"""
                         
                         quiz_raw = genera_testo_gemini([prompt_quiz])
                         quiz_pulito = quiz_raw.strip().replace("```json", "").replace("```", "")
@@ -417,7 +413,7 @@ Devono essere 10 elementi in totale. Testo: {str(testo_arena)[:3000]}"""
                         st.success(f"🔥 Arena Creata! Dai questo PIN: {nuovo_pin}")
                         time.sleep(2)
                         st.rerun()
-                    except Exception as e: st.error(f"Errore creazione arena: {e}")
+                    except Exception as e: st.error(f"Errore creazione arena (forse il testo era strano): {e}")
 
         else:
             pin_inserito = st.text_input("Inserisci il PIN di 4 cifre:")
@@ -446,7 +442,7 @@ Devono essere 10 elementi in totale. Testo: {str(testo_arena)[:3000]}"""
                     del st.session_state.id_sfida_attiva
                     st.rerun()
                 else:
-                    with st.spinner("Cerco lo sfidante..."):
+                    with st.spinner("Cerco lo sfidante... (La pagina si aggiorna da sola)"):
                         time.sleep(3) 
                         st.rerun()    
             
@@ -518,9 +514,13 @@ Devono essere 10 elementi in totale. Testo: {str(testo_arena)[:3000]}"""
                         risposta = st.text_area("Scrivi la tua risposta:", key=f"text_{indice}")
                         if st.button("Consegna al Prof 📝", key=f"btn_a_{indice}"):
                             with st.spinner("Il professore sta correggendo..."):
-                                prompt_voto = [f"""Valuta questa risposta: '{risposta}'. Domanda: '{d['domanda']}'. Appunti: {sfida['appunti_testo'][:2000]}. REGOLE: Scrivi un commento sarcastico alla Dr. House. Poi vai a capo e scrivi esattamente "VOTO: X" (numero da 1 a 30)."""]
+                                prompt_voto = [f"""Valuta questa risposta: '{risposta}'. 
+Domanda: '{d['domanda']}'. 
+Appunti: {sfida['appunti_testo'][:2000]}.
+REGOLE: Scrivi un commento sarcastico alla Dr. House. Ricorda di impersonare un professore di Farmacia Poi vai a capo e scrivi esattamente "VOTO: X" (dove X è un numero da 1 a 30)."""]
                                 try:
                                     risposta_prof = genera_testo_gemini(prompt_voto).strip()
+                                    
                                     if "VOTO:" in risposta_prof:
                                         parti = risposta_prof.split("VOTO:")
                                         commento_prof = parti[0].strip()
@@ -537,6 +537,7 @@ Devono essere 10 elementi in totale. Testo: {str(testo_arena)[:3000]}"""
                                     voto = 1
                                 
                                 st.markdown(f"**🧑‍🏫 Il Prof dice:**\n> *{commento_prof}*")
+                                
                                 messaggio_voto = f"🎓 Voto finale: {voto}/30"
                                 if voto < 12: st.error(messaggio_voto)
                                 elif 12 <= voto <= 17: st.warning(messaggio_voto)
@@ -612,6 +613,7 @@ with tab5:
                     break
 
             st.divider()
+            
             col_rank1, col_rank2 = st.columns(2)
             
             with col_rank1:
@@ -633,10 +635,12 @@ with tab5:
                     st.caption(f"Riassunti: {appunti_creati} - Livello Massimo Raggiunto!")
 
             st.divider()
+            
             c1, c2, c3, c4 = st.columns(4)
             c1.metric(label="Punti Arena Totali", value=punti_totali, delta="Competitivo")
             c2.metric(label="Riassunti Generati", value=appunti_creati, delta="Secchione")
             c3.metric(label="Sfide Giocate", value=sfide_giocate)
+            
             winrate = int((vittorie / sfide_giocate) * 100) if sfide_giocate > 0 else 0
             c4.metric(label="Sfide Vinte 🏆", value=vittorie, delta=f"{winrate}% Win Rate")
 
@@ -690,6 +694,7 @@ with tab6:
             for ap in appunti_pubblici.data:
                 with st.expander(f"📖 {ap['titolo']} | 🧬 {ap['materia']}"):
                     st.caption("Anteprima del testo:")
+                    
                     testo_salvato = ap['testo_estratto']
                     try:
                         t_trasc = testo_salvato.split("[TRASCRIZIONE]")[1].split("[/TRASCRIZIONE]")[0].strip()
@@ -700,9 +705,11 @@ with tab6:
                         
                     anteprima = t_riass[:500] if t_riass else t_trasc[:500]
                     st.write(anteprima + "... [Continua nel PDF]")
+                    
                     st.divider()
                     
                     if ap.get('file_pdf_base64'):
+                        import base64
                         st.download_button(
                             label="📩 Scarica File Originale (PDF)", 
                             data=base64.b64decode(ap['file_pdf_base64']), 
@@ -733,12 +740,13 @@ with tab7:
     
     miei_archiviati = db_get_miei_appunti(st.session_state.utente_loggato.id, solo_privati=True)
     
-    if miei_archiviati and miei_archiviati.data:
+    if miei_archiviati.data:
         st.write(f"Hai **{len(miei_archiviati.data)}/25** appunti privati salvati.")
         
         for ap in miei_archiviati.data:
             data_formattata = ap['created_at'][:10]
             with st.expander(f"📄 {ap['titolo']} | 🧬 {ap['materia']} (Creato il: {data_formattata})"):
+                
                 testo_salvato = ap['testo_estratto']
                 try:
                     t_trasc = testo_salvato.split("[TRASCRIZIONE]")[1].split("[/TRASCRIZIONE]")[0].strip()
@@ -749,6 +757,7 @@ with tab7:
                     
                 anteprima = t_riass[:500] if t_riass else t_trasc[:500]
                 st.write(anteprima + "... [Continua nel PDF]")
+                
                 st.divider()
                 
                 if ap.get('file_pdf_base64'):
