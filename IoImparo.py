@@ -411,7 +411,7 @@ with tab1:
                                         <button onclick="downloadSVG_{i}()" style="position: absolute; top: 10px; left: 10px; z-index: 100; padding: 8px 12px; background: #4F46E5; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">
                                             💾 Scarica per Stampa (PNG)
                                         </button>
-                                        <div id="graphDiv_{i}" class="mermaid" style="width: 100%; height: 600px;">\n{codice_mermaid}\n</div>
+                                        <div id="graphDiv_{i}" class="mermaid" style="width: 100%; height: 800px;">\n{codice_mermaid}\n</div>
                                     </div>
                                     <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
                                     <script src="https://cdn.jsdelivr.net/npm/svg-pan-zoom@3.6.1/dist/svg-pan-zoom.min.js"></script>
@@ -420,8 +420,19 @@ with tab1:
                                         setTimeout(function() {{
                                             var svgElement = document.querySelector('#graphDiv_{i} svg');
                                             if(svgElement) {{
-                                                svgElement.style.width = '100%'; svgElement.style.height = '100%'; svgElement.style.maxWidth = 'none';
-                                                window['panZoom_{i}'] = svgPanZoom(svgElement, {{ zoomEnabled: true, controlIconsEnabled: true, fit: true, center: true }});
+                                                svgElement.style.width = '100%'; 
+                                                svgElement.style.height = '100%'; 
+                                                svgElement.style.maxWidth = 'none';
+                                                
+                                                // AGGIUNTO MAXZOOM E MINZOOM ESTREMI
+                                                window['panZoom_{i}'] = svgPanZoom(svgElement, {{ 
+                                                    zoomEnabled: true, 
+                                                    controlIconsEnabled: true, 
+                                                    fit: true, 
+                                                    center: true,
+                                                    maxZoom: 50,
+                                                    minZoom: 0.1
+                                                }});
                                             }}
                                         }}, 1500);
                                         function downloadSVG_{i}() {{
@@ -443,7 +454,8 @@ with tab1:
                                             img.src = url;
                                         }}
                                     </script>"""
-                                    st.components.v1.html(html_code, height=650)
+                                    # ALZATO LO SPAZIO DI STREAMLIT A 850
+                                    st.components.v1.html(html_code, height=850)
                                 
                                 st.markdown("### 📖 Riassunto Completo")
                                 st.markdown(riassunto)
