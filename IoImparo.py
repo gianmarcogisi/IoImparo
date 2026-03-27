@@ -1,50 +1,196 @@
 import base64
 import streamlit as st
 import os
+from google import genai
 from PIL import Image
 import PyPDF2
+from reportlab.lib.pagesizes import letter
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet
 import io
+from supabase import create_client, Client
 import time
 import random
 import json
-import urllib.parse
-import requests
-
-# --- 📦 IMPORTAZIONE MODULI LOCALI ---
-from moduli.database import supabase, db_salva_appunto, db_get_miei_appunti, db_get_community_appunti
-from moduli.intelligenza import genera_testo_gemini, chat_professore_gemini, get_prompt_mappa, get_prompt_flashcards, get_prompt_esame, cerca_immagine_scientifica, pulisci_codice_mermaid
-from moduli.creatore_pdf import genera_pdf_scaricabile
-from moduli.logica import gestisci_voto_esame, calcola_esito_arena
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from email.mime.application import MIMEApplication
 
 # --- 1. CONFIGURAZIONE PAGINA ---
 NOME_APP = "IoImparo 🎓"
 st.set_page_config(page_title=NOME_APP, page_icon="🎓", layout="wide")
 
-st.markdown("""<style>#MainMenu {visibility: hidden;} footer {visibility: hidden;} header {visibility: hidden;}</style>""", unsafe_allow_html=True)
+# --- NASCONDIAMO IL BRAND STREAMLIT ---
+hide_st_style = """
+            <style>
+            #MainMenu {visibility: hidden;}
+            footer {visibility: hidden;}
+            header {visibility: hidden;}
+            </style>
+            """
+st.markdown(hide_st_style, unsafe_allow_html=True)
 
-# --- COSTANTI ---
-LISTA_MATERIE = [
-    "Chimica Generale ed Inorganica", "Biologia Animale", "Biologia Vegetale", "Fisica", 
-    "Matematica ed Informatica", "Anatomia Umana", "Chimica Organica", "Microbiologia", 
-    "Fisiologia Umana", "Analisi dei Medicinali I", "Biochimica", "Farmacologia e Farmacoterapia", 
-    "Analisi dei Medicinali II", "Patologia Generale", "Chimica Farmaceutica e Tossicologica I",
-    "Chimica Farmaceutica e Tossicologica II", "Tecnologia e Legislazione Farmaceutiche", 
-    "Tossicologia", "Chimica degli Alimenti", "Farmacognosia", "Farmacia Clinica", 
-    "Saggi e Dosaggi dei Farmaci", "Biochimica Applicata", "Fitoterapia", "Igiene"
-]
+# --- 2. SICUREZZA E CHIAVI ---
+api_key = st.secrets["GEMINI_API_KEY"]
+supabase_url = st.secrets["SUPABASE_URL"]
+supabase_key = st.secrets["SUPABASE_KEY"]
 
-# --- 2. GESTIONE SESSIONE ---
-if "utente_loggato" not in st.session_state: st.session_state.utente_loggato = None
-if "testo_pulito_studente" not in st.session_state: st.session_state.testo_pulito_studente = ""
-if "messaggi_chat" not in st.session_state: st.session_state.messaggi_chat = []
+supabase: Client = create_client(supabase_url, supabase_key)
+client = genai.Client(api_key=api_key)
 
 if "access_token" in st.session_state:
     try:
         supabase.auth.set_session(st.session_state.access_token, st.session_state.refresh_token)
     except Exception:
-        pass
+        pass 
 
-# --- 3. LOGIN ---
+# --- I NUOVI MOTORI INTELLIGENTI (100% GEMINI) ---
+def genera_testo_gemini(prompt):
+    max_tentativi = 3
+    attesa = 2
+    for tentativo in range(max_tentativi):
+        try:
+            time.sleep(1) # Piccolo respiro
+            response = client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
+            return response.text
+        except Exception as e:
+            if tentativo < max_tentativi - 1 and ("429" in str(e) or "503" in str(e)):
+                st.toast(f"Gemini sta pensando... riprovo in {attesa}s", icon="⏳")
+                time.sleep(attesa)
+                attesa *= 2
+            else:
+                raise e
+
+def chat_professore_gemini(system_prompt, messaggi_chat):
+    try:
+        prompt_completo = system_prompt + "\n\n--- CRONOLOGIA CHAT ---\n"
+        for msg in messaggi_chat:
+            ruolo = "Professore" if msg["ruolo"] == "assistant" else "Studente"
+            prompt_completo += f"{ruolo}: {msg['contenuto']}\n"
+            
+        prompt_completo += "Professore: "
+        response = client.models.generate_content(model='gemini-2.5-flash', contents=prompt_completo)
+        return response.text
+    except Exception as e:
+        raise e
+
+# ==========================================
+# 🧠 ARMERIA DEI PROMPT (Istruzioni per Gemini)
+# ==========================================
+
+def get_prompt_mappa(istruzioni_trascrizione):
+    return f"""Agisci come il miglior assistente universitario del mondo. 
+Dividi la risposta ESATTAMENTE usando questi tag:
+
+[TRASCRIZIONE]
+{istruzioni_trascrizione}
+[/TRASCRIZIONE]
+
+[SCHEMA]
+Genera ESCLUSIVAMENTE codice Mermaid.js valido (formato graph TD).
+REGOLE TASSATIVE:
+1. Sviluppa in VERTICALE. Max 2 frecce per ogni nodo.
+2. Sintassi: A["Titolo: descrizione breve"] --> B["Titolo: descrizione"]
+3. NO accenti (usa e invece di è), NO virgolette doppie interne, NO parentesi.
+4. Tutto il testo di un nodo deve stare su una singola riga.
+[/SCHEMA]
+
+[RIASSUNTO]
+Scrivi un riassunto discorsivo, chiaro, con le parole chiave in grassetto.
+[/RIASSUNTO]"""
+
+def get_prompt_flashcards(num_cards, testo_appunti):
+    return f"""Agisci come il miglior professore universitario. 
+Estrai {num_cards} concetti chiave dal testo fornito e crea delle flashcard in formato JSON puro (senza markdown `json`).
+Struttura ESATTA: [{{"domanda": "...", "tipo_visuale": "molecola", "query_visuale": "paracetamol", "risposta": "..."}}]
+Tipi visuali permessi: "molecola" (usa il nome inglese), "immagine" (breve query inglese), "nessuno" (lascia vuoto).
+Testo da usare: {testo_appunti[:3000]}"""
+
+def get_prompt_esame(testo_da_studiare):
+    return f"""Sei un Prof. di Farmacia universitario spietato (stile Dr. House). Testo: {testo_da_studiare}
+    
+REGOLE TASSATIVE:
+1. Se lo studente scrive solo "Iniziamo", ti saluta o fa convenevoli: NON DARE NESSUN VOTO. Fai direttamente la prima domanda per avviare l'esame.
+2. Se invece lo studente sta rispondendo a una tua domanda: valuta la risposta. Se corretta, sii ironico. Se errata, sii cinico e cattivo.
+3. SOLO quando valuti una risposta vera, scrivi su una riga nuova: "VOTO: X" (numero da 1 a 30).
+4. Dopo il voto, fai una NUOVA domanda specifica, colpendolo sui dettagli.
+5. NON SEMPLIFICARE MAI LE DOMANDE. Nessuna pietà."""
+
+# ==========================================
+# 🗄️ ARMERIA DEL DATABASE (Funzioni Supabase)
+# ==========================================
+
+def db_salva_appunto(user_id, testo, is_public, titolo, materia):
+    """Salva un nuovo appunto nel database."""
+    try:
+        return supabase.table("appunti_salvati").insert({
+            "user_id": user_id,
+            "testo_estratto": testo,
+            "is_public": is_public,
+            "titolo": titolo,
+            "materia": materia
+        }).execute()
+    except Exception as e:
+        st.error(f"Errore salvataggio DB: {e}")
+        return None
+
+def db_get_miei_appunti(user_id, solo_privati=False):
+    """Recupera gli appunti dell'utente loggato."""
+    try:
+        query = supabase.table("appunti_salvati").select("*").eq("user_id", user_id)
+        if solo_privati:
+            query = query.eq("is_public", False)
+        return query.order("created_at", desc=True).execute()
+    except:
+        return None
+
+def db_get_community_appunti(ricerca=""):
+    """Recupera gli appunti pubblici con filtro ricerca."""
+    try:
+        query = supabase.table("appunti_salvati").select("*").eq("is_public", True)
+        if ricerca:
+            query = query.ilike("titolo", f"%{ricerca}%")
+        return query.order("titolo").execute()
+    except:
+        return None
+
+# ==========================================
+# 🎮 REGISTI DELLA LOGICA (Game Managers)
+# ==========================================
+
+def gestisci_voto_esame(risposta_prof):
+    """Estrae il voto e calcola lo stato della sessione esame."""
+    voto = 0
+    try:
+        # Estrazione numerica del voto
+        voto_str = risposta_prof.split("VOTO:")[1].strip()
+        voto = int("".join(filter(str.isdigit, voto_str[:3])))
+    except:
+        voto = 0
+    
+    # Aggiornamento contatori in session_state
+    if voto > 0 and voto < 18:
+        st.session_state.errori_totali += 1
+    
+    if st.session_state.errori_totali >= 4:
+        st.session_state.esame_bocciato = True
+        
+    return voto
+
+def calcola_esito_arena(is_host, sfida):
+    """Restituisce il punteggio e la colonna corretta per l'Arena."""
+    col_punti = "punteggio_host" if is_host else "punteggio_guest"
+    col_risposte = "risposte_host" if is_host else "risposte_guest"
+    return col_punti, col_risposte
+
+# --- 3. GESTIONE SESSIONE UTENTE ---
+if "utente_loggato" not in st.session_state: st.session_state.utente_loggato = None
+if "testo_pulito_studente" not in st.session_state: st.session_state.testo_pulito_studente = ""
+if "riassunto_pdf" not in st.session_state: st.session_state.riassunto_pdf = None
+if "messaggi_chat" not in st.session_state: st.session_state.messaggi_chat = []
+
+# --- 4. LOGIN ---
 if st.session_state.utente_loggato is None:
     st.title(f"🎓 {NOME_APP}")
     st.warning("👋 Benvenuto! Accedi o registrati per iniziare.")
@@ -71,138 +217,248 @@ if st.session_state.utente_loggato is None:
             except Exception as e: st.error(f"Errore: {e}")
     st.stop() 
 
-# --- 4. HEADER ---
+# --- 5. INTERFACCIA PRINCIPALE & MENU A TENDINA ---
 col_titolo, col_profilo = st.columns([4, 1])
+
 with col_titolo:
     st.title(f"🎓 Centrale Operativa {NOME_APP}")
+
 with col_profilo:
+    st.write("") 
     with st.popover("👤 Area Riservata", use_container_width=True):
+        st.image("https://img.icons8.com/fluent/100/000000/graduation-cap.png", width=50)
         st.write(f"Socio:\n`{st.session_state.utente_loggato.email}`")
         if st.button("Esci (Logout)", use_container_width=True):
             st.session_state.utente_loggato = None
-            if "access_token" in st.session_state: del st.session_state.access_token
             st.rerun()
 
 st.divider()
 
-# --- 5. NAVIGAZIONE ---
+# --- 6. PDF ---
+def genera_pdf_scaricabile(trascrizione, schema, riassunto):
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=letter, rightMargin=50, leftMargin=50, topMargin=50, bottomMargin=50)
+    styles = getSampleStyleSheet()
+    
+    style_title = styles['Heading1']
+    style_sub = styles['Heading2']
+    style_normal = styles['Normal']
+    
+    story = []
+    
+    story.append(Paragraph("Appunti Completi - IoImparo 🎓", style_title))
+    story.append(Spacer(1, 20))
+    
+    story.append(Paragraph("📝 1. Trascrizione", style_sub))
+    story.append(Paragraph(trascrizione.replace('\n', '<br/>'), style_normal))
+    story.append(Spacer(1, 20))
+    
+    story.append(Paragraph("🖼️ 2. Schema Concettuale", style_sub))
+    # Invece del codice brutto, mettiamo un avviso elegante per il PDF
+    story.append(Paragraph("<i>[Nota: Lo schema visivo e navigabile è consultabile interattivamente all'interno della Centrale Operativa Web]</i>", style_normal))
+    story.append(Spacer(1, 20))
+    
+    story.append(Paragraph("📖 3. Riassunto Completo", style_sub))
+    testo_riassunto = riassunto.replace('**', '') 
+    story.append(Paragraph(testo_riassunto.replace('\n', '<br/>'), style_normal))
+    
+    doc.build(story)
+    buf.seek(0)
+    return buf
+
+# TABS COMPLETI CON NOMI PULITI
 tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
-    "🗺️ Fase 1: Elabora & PDF", "⚡ Fase 2: Flashcard", "🧑‍🏫 Fase 3: Esame",
-    "🥊 Fase 4: Arena Farmacia", "🏆 Profilo Ranked", "🌍 Community", "🗂️ Archivio Privato" 
+    "🗺️ Fase 1: Elabora & PDF", 
+    "⚡ Fase 2: Flashcard", 
+    "🧑‍🏫 Fase 3: Esame",
+    "🥊 Fase 4: Arena Farmacia",
+    "🏆 Profilo Ranked",  
+    "🌍 Community",       
+    "🗂️ Archivio Privato" 
 ])
 
-# ==========================================
-# FASE 1: ELABORA & PDF
-# ==========================================
 with tab1:
     col1, col2 = st.columns([1, 2])
+    
     with col1:
         st.subheader("📥 Carica Materiale")
-        st.info("💡 **Consiglio:** Usa *Adobe Scan* per file puliti. Più il testo è leggibile, migliore sarà il riassunto.")
         
-        sorgente_f1 = st.radio("Cosa vuoi elaborare?", ["Carica nuovi PDF 📄", "Rielabora dall'Archivio 🗂️"], horizontal=True)
+        # Un consiglio clinico per i nuovi utenti
+        st.info("💡 **Consiglio:** Usa un'app come *Adobe Scan* o *CamScanner* dal telefono per fotografare i tuoi appunti e unirli in un PDF pulito prima di caricarli!")
         
-        file_input = None
-        testo_da_archivio = None
+        # Solo PDF, massimo 5
+        file_input = st.file_uploader(
+            "Scegli i file PDF (Max 5, max 100MB l'uno)", 
+            type=['pdf'], 
+            accept_multiple_files=True, 
+            key="canale_pdf_multiplo"
+        )
         
-        if sorgente_f1 == "Carica nuovi PDF 📄":
-            file_input = st.file_uploader("Scegli i file PDF (Max 5)", type=['pdf'], accept_multiple_files=True)
-        else:
-            arch_db = db_get_miei_appunti(st.session_state.utente_loggato.id)
-            if arch_db and arch_db.data:
-                mappa_arch = {f"📁 {a['titolo']}": a['testo_estratto'] for a in arch_db.data}
-                scelta_a = st.selectbox("Seleziona appunto precedente:", list(mappa_arch.keys()))
-                testo_da_archivio = mappa_arch[scelta_a]
-            else:
-                st.warning("Archivio vuoto. Carica prima un PDF.")
-
         st.divider()
         st.subheader("💾 Opzioni di Salvataggio")
-        visibilita = st.radio("Visibilità Appunti:", ["🔒 Privato", "🌍 Pubblico"], horizontal=True)
-        is_public = (visibilita == "🌍 Pubblico")
-        titolo_appunto = st.text_input("Dai un titolo chiaro (es. Enzimi):")
-        materia_appunto = st.selectbox("Seleziona la Materia:", LISTA_MATERIE)
+        visibilita = st.radio("Visibilità Appunti:", ["🔒 Privato (Solo per me)", "🌍 Pubblico (Condividi nella Community)"], horizontal=True)
+        is_public = (visibilita == "🌍 Pubblico (Condividi nella Community)")
         
-        blocca_bottone = not titolo_appunto
-        if blocca_bottone: st.warning("⚠️ Inserisci un Titolo per poter salvare.")
+        # --- LA TUA LISTA DELLE MATERIE ---
+        lista_materie = [
+            "Chimica Generale ed Inorganica", "Biologia Animale", "Biologia Vegetale", "Fisica", 
+            "Matematica ed Informatica", "Anatomia Umana", "Chimica Organica", "Microbiologia", 
+            "Fisiologia Umana", "Analisi dei Medicinali I", "Biochimica", "Farmacologia e Farmacoterapia", 
+            "Analisi dei Medicinali II", "Patologia Generale", "Chimica Farmaceutica e Tossicologica I",
+            "Chimica Farmaceutica e Tossicologica II", "Tecnologia e Legislazione Farmaceutiche", 
+            "Tossicologia", "Chimica degli Alimenti", "Farmacognosia", "Farmacia Clinica", 
+            "Saggi e Dosaggi dei Farmaci", "Biochimica Applicata", "Fitoterapia", "Igiene"
+        ]
+        
+        # I campi ora appaiono SEMPRE, sia per il Pubblico che per il Privato
+        titolo_appunto = st.text_input("Dai un titolo chiaro (es. Enzimi):")
+        materia_appunto = st.selectbox("Seleziona la Materia:", lista_materie)
+        
+        blocca_bottone = False
+        # Controllo che il titolo non sia vuoto per non avere un Archivio disordinato
+        if not titolo_appunto:
+            st.warning("⚠️ Inserisci un Titolo per poter salvare i tuoi appunti.")
+            blocca_bottone = True # Blocca il bottone finché non scrivi il titolo
 
-        if st.button("Spremi Appunti 🪄", type="primary", use_container_width=True, disabled=blocca_bottone):
-            if not file_input and not testo_da_archivio:
-                st.error("⚠️ Nessun file o appunto selezionato!")
-            else:
-                with st.spinner("🧠 Analisi estrema in corso..."):
-                    try:
-                        st.session_state.testo_pulito_studente = ""
-                        istruzioni_trascrizione = "Trascrivi il documento in modo ESTREMAMENTE LUNGO E DETTAGLIATO. Non riassumere nulla. Scrivi il testo più lungo e completo che ti è tecnicamente possibile generare."
-                        
-                        if file_input:
-                            for i, pdf_file in enumerate(file_input):
-                                with st.expander(f"📊 Analisi: {pdf_file.name}", expanded=True):
-                                    reader = PyPDF2.PdfReader(pdf_file)
-                                    testo_estratto_pdf = "".join([page.extract_text() for page in reader.pages])
-                                    contenuti = [get_prompt_mappa(istruzioni_trascrizione), testo_estratto_pdf]
-                                    
-                                    testo_gemini = genera_testo_gemini(contenuti)
-                                    st.session_state.testo_pulito_studente += f"\n--- {pdf_file.name} ---\n{testo_gemini}"
-                        else:
-                            contenuti = [get_prompt_mappa(istruzioni_trascrizione), testo_da_archivio]
-                            testo_gemini = genera_testo_gemini(contenuti)
-                            st.session_state.testo_pulito_studente = testo_gemini
-
-                        res = db_salva_appunto(
-                            st.session_state.utente_loggato.id, 
-                            st.session_state.testo_pulito_studente, 
-                            is_public, titolo_appunto, materia_appunto
-                        )
-                        if res: st.toast("✅ Appunto salvato nell'archivio!", icon="💾")
-                        st.balloons()
-
-                    except Exception as e: st.error(f"Errore Gemini: {e}")
+        bottone_elabora = st.button("Spremi Appunti 🪄", type="primary", use_container_width=True, disabled=blocca_bottone)
 
     with col2:
         st.subheader("📄 Risultato")
-        if st.session_state.testo_pulito_studente:
-            txt = st.session_state.testo_pulito_studente
-            try:
-                trascrizione = txt.split("[TRASCRIZIONE]")[1].split("[/TRASCRIZIONE]")[0].strip()
-                codice_mermaid = txt.split("[SCHEMA]")[1].split("[/SCHEMA]")[0].strip()
-                riassunto = txt.split("[RIASSUNTO]")[1].split("[/RIASSUNTO]")[0].strip()
-            except:
-                trascrizione, codice_mermaid, riassunto = "", "", txt 
-            
-            st.markdown("### 📝 Trascrizione Dettagliata")
-            st.write(trascrizione[:1000] + "\n\n*[Continua...]*" if trascrizione else "Documento elaborato.")
+        
+        # Trasformiamo file_input in una lista se è un file singolo per evitare errori
+        if file_input is not None and not isinstance(file_input, list):
+            file_input = [file_input]
+        
+        file_valido = file_input is not None and len(file_input) > 0
+        
+        if bottone_elabora:
+            if not file_valido:
+                st.error("⚠️ Devi prima caricare almeno un file!")
+            else:
+                # VALIDAZIONE PDF: MAX 5 FILE E 100MB L'UNO
+                if len(file_input) > 5:
+                    st.error("🚨 Hai caricato troppi PDF. Il limite è 5.")
+                    st.stop()
+                
+                for f in file_input:
+                    if f.size > 100 * 1024 * 1024: # 100 MB
+                        st.error(f"🚨 Il file '{f.name}' è troppo grande! Max 100 MB.")
+                        st.stop()
 
-            st.markdown("### 🖼️ Schema Concettuale Visivo")
-            if codice_mermaid:
-                codice_mermaid_pulito = pulisci_codice_mermaid(codice_mermaid)
-                html_code = f"""
-                <div id="wrapper" style="width: 100%; background: white; border-radius: 10px; border: 1px solid #ccc;">
-                    <div id="graphDiv" class="mermaid" style="width: 100%; height: 600px;">\n{codice_mermaid_pulito}\n</div>
-                </div>
-                <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
-                <script src="https://cdn.jsdelivr.net/npm/svg-pan-zoom@3.6.1/dist/svg-pan-zoom.min.js"></script>
-                <script>
-                    mermaid.initialize({{ startOnLoad: true, theme: 'base' }});
-                    setTimeout(function() {{
-                        var svgElement = document.querySelector('#graphDiv svg');
-                        if(svgElement) {{
-                            svgElement.style.width = '100%'; svgElement.style.height = '100%';
-                            svgPanZoom(svgElement, {{ zoomEnabled: true, controlIconsEnabled: true }});
-                        }}
-                    }}, 1500);
-                </script>"""
-                st.components.v1.html(html_code, height=650)
-            
-            st.markdown("### 📖 Riassunto Completo")
-            st.markdown(riassunto)
-            
-            pdf_bytes = genera_pdf_scaricabile(trascrizione, codice_mermaid, riassunto)
-            st.download_button("📩 Scarica PDF Elaborato", data=pdf_bytes, file_name=f"{titolo_appunto}.pdf", mime="application/pdf", use_container_width=True)
+                if "ultimo_utilizzo" not in st.session_state: st.session_state.ultimo_utilizzo = 0
+                if time.time() - st.session_state.ultimo_utilizzo < 30:
+                    st.warning("⏱️ Sistema in raffreddamento. Attendi 30 secondi.")
+                    st.stop()
+                st.session_state.ultimo_utilizzo = time.time()
 
-# ==========================================
-# FASE 2: FLASHCARD
-# ==========================================
+                # --- QUI INIZIA L'ELABORAZIONE (TUTTO RIENTRATO A DESTRA) ---
+                with st.spinner("🧠 Analisi del materiale in corso..."):
+                    try:
+                        st.session_state.testo_pulito_studente = "" # Azzera la memoria pregressa
+                        
+                        # =======================================================
+                        # 2. LOGICA PDF (Catena di montaggio: isola ogni file)
+                        # =======================================================
+                        istruzioni_trascrizione = "Trascrivi fedelmente e in modo ordinato tutto il testo e i concetti chiave contenuti in questo documento."
+                        
+                        for i, pdf_file in enumerate(file_input):
+                            # Usiamo un expander per tenere l'interfaccia pulita se ci sono più PDF
+                            with st.expander(f"📊 Risultati Analisi: {pdf_file.name}", expanded=True):
+                                reader = PyPDF2.PdfReader(pdf_file)
+                                testo_estratto_pdf = "".join([page.extract_text() for page in reader.pages])
+                                contenuti = [get_prompt_mappa(istruzioni_trascrizione), testo_estratto_pdf]
+                                
+                                response = client.models.generate_content(model='gemini-2.5-flash', contents=contenuti)
+                                testo_gemini = response.text
+                                
+                                st.session_state.testo_pulito_studente += f"\n--- {pdf_file.name} ---\n{testo_gemini}"
+                                
+                                try:
+                                    trascrizione = testo_gemini.split("[TRASCRIZIONE]")[1].split("[/TRASCRIZIONE]")[0].strip()
+                                    codice_mermaid = testo_gemini.split("[SCHEMA]")[1].split("[/SCHEMA]")[0].strip()
+                                    riassunto = testo_gemini.split("[RIASSUNTO]")[1].split("[/RIASSUNTO]")[0].strip()
+                                except:
+                                    trascrizione, codice_mermaid, riassunto = "", "", testo_gemini 
+                                
+                                import re
+                                mappa_pulizia = str.maketrans("àèéìòùÀÈÉÌÒÙ", "aeeiouAEEIOU")
+                                codice_mermaid = codice_mermaid.translate(mappa_pulizia).replace("```mermaid", "").replace("```", "").strip()
+                                codice_mermaid = codice_mermaid.replace("(", "-").replace(")", "")
+                                codice_mermaid = codice_mermaid.replace("-->", "FRECCIA_SALVA")
+                                codice_mermaid = codice_mermaid.replace("<", " min ").replace(">", " mag ")
+                                codice_mermaid = codice_mermaid.replace("FRECCIA_SALVA", "-->")
+                                codice_mermaid = codice_mermaid.replace(";", "")
+                                codice_mermaid = re.sub(r'(graph\s+TD)\s+', r'\1\n', codice_mermaid, flags=re.IGNORECASE)
+                                codice_mermaid = re.sub(r'\]\s+(?=[A-Za-z0-9_]+\s*(?:\[|-))', ']\n', codice_mermaid)
+                                codice_mermaid = re.sub(r'\n+', '\n', codice_mermaid)
+                                codice_mermaid = codice_mermaid.replace("] ", "]\n")
+                                
+                                st.markdown("### 📝 Trascrizione")
+                                st.write(trascrizione if trascrizione else "Documento elaborato.")
+
+                                st.markdown("### 🖼️ Schema Concettuale Visivo")
+                                if codice_mermaid and "graph" in codice_mermaid:
+                                    # Identificatori dinamici (_i) per evitare conflitti JavaScript se ci sono più grafici
+                                    html_code = f"""
+                                    <div id="wrapper_{i}" style="width: 100%; background: white; border-radius: 10px; border: 1px solid #ccc; position: relative;">
+                                        <button onclick="downloadSVG_{i}()" style="position: absolute; top: 10px; left: 10px; z-index: 100; padding: 8px 12px; background: #4F46E5; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">
+                                            💾 Scarica per Stampa (PNG)
+                                        </button>
+                                        <div id="graphDiv_{i}" class="mermaid" style="width: 100%; height: 600px;">\n{codice_mermaid}\n</div>
+                                    </div>
+                                    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+                                    <script src="https://cdn.jsdelivr.net/npm/svg-pan-zoom@3.6.1/dist/svg-pan-zoom.min.js"></script>
+                                    <script>
+                                        mermaid.initialize({{ startOnLoad: true, theme: 'base' }});
+                                        setTimeout(function() {{
+                                            var svgElement = document.querySelector('#graphDiv_{i} svg');
+                                            if(svgElement) {{
+                                                svgElement.style.width = '100%'; svgElement.style.height = '100%'; svgElement.style.maxWidth = 'none';
+                                                window['panZoom_{i}'] = svgPanZoom(svgElement, {{ zoomEnabled: true, controlIconsEnabled: true, fit: true, center: true }});
+                                            }}
+                                        }}, 1500);
+                                        function downloadSVG_{i}() {{
+                                            var svg = document.querySelector('#graphDiv_{i} svg');
+                                            var canvas = document.createElement('canvas');
+                                            var bbox = svg.getBBox();
+                                            canvas.width = bbox.width * 2; canvas.height = bbox.height * 2;
+                                            var context = canvas.getContext('2d');
+                                            var img = new Image();
+                                            var xml = new XMLSerializer().serializeToString(svg);
+                                            var svgBlob = new Blob([xml], {{type: 'image/svg+xml;charset=utf-8'}});
+                                            var url = URL.createObjectURL(svgBlob);
+                                            img.onload = function() {{
+                                                context.fillStyle = "white"; context.fillRect(0, 0, canvas.width, canvas.height);
+                                                context.drawImage(img, 0, 0, canvas.width, canvas.height);
+                                                var a = document.createElement("a");
+                                                a.href = canvas.toDataURL("image/png"); a.download = "Schema_{pdf_file.name}.png"; a.click();
+                                            }};
+                                            img.src = url;
+                                        }}
+                                    </script>"""
+                                    st.components.v1.html(html_code, height=650)
+                                
+                                st.markdown("### 📖 Riassunto Completo")
+                                st.markdown(riassunto)
+                                
+                                pdf_generato = genera_pdf_scaricabile(trascrizione, codice_mermaid, riassunto)
+                                st.download_button(label=f"📩 Scarica PDF Elaborato ({pdf_file.name})", data=pdf_generato, file_name=f"elaborato_{pdf_file.name}", mime="application/pdf", key=f"dl_pdf_{i}", use_container_width=True)
+
+                                # Salvataggio pulito
+                                res = db_salva_appunto(
+                                    st.session_state.utente_loggato.id, 
+                                    st.session_state.testo_pulito_studente, 
+                                    is_public, titolo_appunto, materia_appunto
+                                )
+                                if res:
+                                    st.toast("✅ Appunto salvato!", icon="💾")
+
+                        st.balloons()
+
+                    except Exception as e:
+                        if "503" in str(e): st.warning("⏳ Server Google intasati. Riprova tra poco!")
+                        else: st.error(f"Errore Gemini: {e}")
+
 with tab2:
     st.subheader("⚡ Flashcard Visive & Dinamiche")
     
@@ -234,15 +490,15 @@ with tab2:
                     prompt_flash = get_prompt_flashcards(num_cards, testo_f2)
 
                     try:
-                        # FIX: Usiamo la funzione del nostro modulo, non il 'client' diretto!
-                        testo = genera_testo_gemini([prompt_flash])
+                        res = client.models.generate_content(model='gemini-2.5-flash', contents=prompt_flash)
+                        testo = res.text
                         
                         inizio = testo.find('[')
                         fine = testo.rfind(']') + 1
                         
                         if inizio == -1 or fine <= 0:
                             st.error("L'IA non ha generato un array JSON.")
-                            st.code(testo)
+                            st.code(testo) # Stampiamo la risposta grezza!
                         else:
                             st.session_state.flashcards = json.loads(testo[inizio:fine])
                             st.session_state.indice_flashcard = 0
@@ -250,6 +506,11 @@ with tab2:
                             
                     except Exception as e:
                         st.error(f"Errore tecnico IA: {str(e)}")
+                        try:
+                            st.warning("Risposta grezza ricevuta:")
+                            st.write(res.text)
+                        except:
+                            st.warning("Nessun testo ricevuto (Probabile blocco dei filtri di sicurezza sui farmaci!).")
 
         if st.session_state.flashcards:
             idx = st.session_state.indice_flashcard
@@ -259,13 +520,55 @@ with tab2:
                 st.write(f"### Carta {idx+1} di {len(st.session_state.flashcards)}")
                 st.markdown(f"#### ❓ {carta.get('domanda')}")
                 
+                import urllib.parse
+                import requests # Fondamentale per controllare se i link sono "vivi"
+
+                t_v = carta.get('tipo_visuale')
+                # Usiamo il nome inglese come priorità medica
                 q_v_raw = str(carta.get('nome_molecola_inglese_pubchem', carta.get('query_visuale', ''))).strip()
-                img_url = cerca_immagine_scientifica(carta.get('tipo_visuale'), q_v_raw)
-                if img_url: st.image(img_url, width=400)
-                
+                q_v_url = urllib.parse.quote(q_v_raw)
+
+                image_shown = False # Flag per capire se abbiamo trovato un'immagine
+
+                # --- LIVELLO 1: Ricerca Molecolare (PubChem) ---
+                if t_v == 'molecola' and q_v_raw:
+                    url_pubchem = f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/{q_v_url}/PNG"
+                    try:
+                        # Facciamo un check rapido per vedere se la molecola esiste
+                        check = requests.head(url_pubchem, timeout=3)
+                        if check.status_code == 200:
+                            st.image(url_pubchem, width=300)
+                            image_shown = True
+                    except: pass
+
+                # --- LIVELLO 2: Ricerca Scientifica Reale (Wikipedia) ---
+                # Se PubChem ha fallito o se non è una molecola, cerchiamo una foto vera
+                if not image_shown and q_v_raw:
+                    wiki_api = f"https://en.wikipedia.org/w/api.php?action=query&titles={q_v_url}&prop=pageimages&format=json&pithumbsize=500&redirects=1"
+                    try:
+                        res = requests.get(wiki_api, timeout=3).json()
+                        pages = res.get("query", {}).get("pages", {})
+                        for p_id in pages:
+                            if "thumbnail" in pages[p_id]:
+                                wiki_url = pages[p_id]["thumbnail"]["source"]
+                                st.image(wiki_url, width=400)
+                                image_shown = True
+                                break
+                    except: pass
+
+                # --- LIVELLO 3: Rappresentazione Concettuale AI (Pollinations) ---
+                # Il nostro paracadute finale: se non esiste una foto, la inventiamo
+                if not image_shown and q_v_raw:
+                    frase_prompt = f"{q_v_raw} medical scientific illustration clean background"
+                    q_v_ai = urllib.parse.quote(frase_prompt)
+                    url_ai = f"https://image.pollinations.ai/prompt/{q_v_ai}?width=512&height=512&nologo=true"
+                    st.image(url_ai, width=400)
+                    image_shown = True # Almeno l'AI risponde sempre
+
                 with st.expander("Gira la Carta 🔄"):
+                    # Rivela il nome del soggetto cercato solo ora!
                     if q_v_raw:
-                        st.info(f"🧪 **Soggetto:** {q_v_raw}")
+                        st.info(f"🧪 **Soggetto:** {q_v_raw}") # Nascosto e protetto dallo spoiler
                     
                     st.success(f"**Risposta:** {carta.get('risposta')}")
 
@@ -277,12 +580,10 @@ with tab2:
                 st.session_state.indice_flashcard += 1
                 st.rerun()
 
-# ==========================================
-# FASE 3: ESAME ORALE
-# ==========================================
 with tab3:
     st.subheader("🧑‍🏫 Simulazione Esame Orale")
     
+    # --- VARIABILI PER LA CATTIVERIA DEL PROF ---
     if "errori_totali" not in st.session_state: st.session_state.errori_totali = 0
     if "esame_bocciato" not in st.session_state: st.session_state.esame_bocciato = False
 
@@ -298,6 +599,7 @@ with tab3:
     if opzioni_esame:
         scelta_e = st.selectbox("Argomento esame:", list(opzioni_esame.keys()), key="sel_e")
         
+        # RESET AZZERA ANCHE I CONTATORI DI BOCCIATURA
         if st.button("🔄 Reset Esame"):
             st.session_state.messaggi_chat = []
             st.session_state.errori_totali = 0
@@ -312,18 +614,24 @@ with tab3:
             st.session_state.messaggi_chat.append({"ruolo": "assistant", "contenuto": msg_i})
             st.rerun()
 
+        # SE NON SEI ANCORA STATO CACCIATO DALL'AULA...
         if not st.session_state.esame_bocciato:
             if p_studente := st.chat_input("Rispondi... (Il libretto non dimentica)"):
                 st.session_state.messaggi_chat.append({"ruolo": "user", "contenuto": p_studente})
                 
                 with st.chat_message("assistant"):
                     with st.spinner("Il Prof. annota le tue mancanze..."):
+                        
+                        # PROMPT SPIETATO E MEMORIA DI FERRO
                         sys_p = get_prompt_esame(opzioni_esame[scelta_e])
+                        
                         r_prof = chat_professore_gemini(sys_p, st.session_state.messaggi_chat)    
                         
+                        # LOGICA VOTI E BOCCIATURA AD ACCUMULO
                         voto = gestisci_voto_esame(r_prof)
                         
                         if voto > 0:
+                            # CONTROLLO BOCCIATURA (LIMITE: 4 ERRORI TOTALI)
                             if st.session_state.esame_bocciato:
                                 st.session_state.esame_bocciato = True
                                 msg_bocciato = f"🔴 VOTO: {voto}/30. Quarto errore totale. La sua preparazione fa acqua da tutte le parti. Prenda il suo libretto, è **BOCCIATO**. E chiuda la porta uscendo!"
@@ -331,18 +639,25 @@ with tab3:
                                 st.session_state.messaggi_chat.append({"ruolo": "assistant", "contenuto": msg_bocciato})
                                 time.sleep(4)
                                 st.rerun()
+                            
                             else:
+                                # CONTINUA L'ESAME NORMALE
                                 commento = r_prof.split("VOTO:")[0]
                                 nuova_d = r_prof.split(str(voto))[1] if str(voto) in r_prof else ""
 
                                 st.markdown(commento)
-                                if voto < 18: st.error(f"🔴 VOTO: {voto}/30 - Insufficiente!")
-                                elif voto < 24: st.warning(f"🟡 VOTO: {voto}/30 - Poteva fare di meglio.")
-                                else: st.success(f"🟢 VOTO: {voto}/30 - Eccellente!")
+                                if 1 <= voto <= 11: 
+                                    st.error(f"🔴 VOTO: {voto}/30 - Disastroso. (Errori accumulati: {st.session_state.errori_totali}/4)")
+                                elif 12 <= voto <= 17: 
+                                    st.warning(f"🟡 VOTO: {voto}/30 - Mediocre. (Errori accumulati: {st.session_state.errori_totali}/4)")
+                                elif voto >= 18: 
+                                    # Ti fa i complimenti, ma ti ricorda che sei sul filo del rasoio se hai errori
+                                    st.success(f"🟢 VOTO: {voto}/30 - Accettabile. Ma il libretto ricorda le sue lacune. (Errori accumulati: {st.session_state.errori_totali}/4)")
                                 
                                 st.markdown(f"**Prossima Domanda:** {nuova_d}")
                                 st.session_state.messaggi_chat.append({"ruolo": "assistant", "contenuto": r_prof})
                                 
+                                # PAUSA TATTICA DI 5 SECONDI
                                 st.info("⌛ Il Professore ti scruta in silenzio... (5s)")
                                 time.sleep(5)
                                 st.rerun()
@@ -351,11 +666,10 @@ with tab3:
                             st.session_state.messaggi_chat.append({"ruolo": "assistant", "contenuto": r_prof})
                             st.rerun()
         else:
+            # SCHERMATA DI BOCCIATURA
             st.error("❌ ESAME FALLITO. Il professore ti ha bocciato. Ripresentati al prossimo appello (Premi 'Reset Esame').")
 
-# ==========================================
-# FASE 4: ARENA FARMACIA
-# ==========================================
+# --- FASE 4 DEVE STARE TUTTO A SINISTRA (ZERO SPAZI) ---
 with tab4:
     st.subheader("🧪 Arena di Farmacia")
 
@@ -375,7 +689,15 @@ with tab4:
         scelta_arena = st.radio("Cosa vuoi fare?", ["Crea Sfida 🏗️", "Unisciti a Sfida ⚔️"], horizontal=True)
 
         if scelta_arena == "Crea Sfida 🏗️":
-            materia = st.selectbox("Seleziona l'esame:", LISTA_MATERIE)
+            materia = st.selectbox("Seleziona l'esame:", [
+                "Chimica Generale ed Inorganica", "Biologia Animale", "Biologia Vegetale", "Fisica", 
+                "Matematica ed Informatica", "Anatomia Umana", "Chimica Organica", "Microbiologia", 
+                "Fisiologia Umana", "Analisi dei Medicinali I", "Biochimica", "Farmacologia e Farmacoterapia", 
+                "Analisi dei Medicinali II", "Patologia Generale", "Chimica Farmaceutica e Tossicologica I",
+                "Chimica Farmaceutica e Tossicologica II", "Tecnologia e Legislazione Farmaceutiche", 
+                "Tossicologia", "Chimica degli Alimenti", "Farmacognosia", "Farmacia Clinica", 
+                "Saggi e Dosaggi dei Farmaci", "Biochimica Applicata", "Fitoterapia", "Igiene"
+            ])
             file_sfida = st.file_uploader("Carica materiale", type=['pdf', 'jpg', 'png'], key="file_arena")
             
             if st.button("Genera Arena 🏟️", type="primary") and file_sfida:
@@ -396,7 +718,7 @@ Rispondi SOLO ed ESCLUSIVAMENTE con un array JSON avente questa struttura esatta
 Devono essere 10 elementi in totale (5 multipla, 5 aperta). Nessun testo prima o dopo l'array JSON.
 Testo: {str(testo_arena)[:3000]}"""
                         
-                        quiz_raw = genera_testo_gemini([prompt_quiz])
+                        quiz_raw = genera_testo_gemini(prompt_quiz)
                         quiz_pulito = quiz_raw.strip().replace("```json", "").replace("```", "")
                         
                         nuovo_pin = str(random.randint(1000, 9999))
@@ -450,7 +772,12 @@ Testo: {str(testo_arena)[:3000]}"""
                 st.divider()
                 
                 is_host = (st.session_state.utente_loggato.id == sfida['host_id'])
-                colonna_punteggio, colonna_risposte, mio_ping_col, suo_ping_col = calcola_esito_arena(is_host, sfida)
+                colonna_punteggio = "punteggio_host" if is_host else "punteggio_guest"
+                colonna_risposte = "risposte_host" if is_host else "risposte_guest"
+                
+                # --- SISTEMA AFK (VITTORIA A TAVOLINO) ---
+                mio_ping_col = "last_ping_host" if is_host else "last_ping_guest"
+                suo_ping_col = "last_ping_guest" if is_host else "last_ping_host"
                 
                 adesso = time.time()
                 supabase.table("sfide_multiplayer").update({mio_ping_col: adesso}).eq("id", sfida['id']).execute()
@@ -469,6 +796,7 @@ Testo: {str(testo_arena)[:3000]}"""
                         st.rerun()
                     st.stop() 
                 
+                # Riconnessione - Conta quante risposte hai già dato
                 risposte_date = sfida.get(colonna_risposte, [])
                 if risposte_date is None: risposte_date = []
                 indice = len(risposte_date)
@@ -514,10 +842,10 @@ Testo: {str(testo_arena)[:3000]}"""
                         risposta = st.text_area("Scrivi la tua risposta:", key=f"text_{indice}")
                         if st.button("Consegna al Prof 📝", key=f"btn_a_{indice}"):
                             with st.spinner("Il professore sta correggendo..."):
-                                prompt_voto = [f"""Valuta questa risposta: '{risposta}'. 
+                                prompt_voto = f"""Valuta questa risposta: '{risposta}'. 
 Domanda: '{d['domanda']}'. 
 Appunti: {sfida['appunti_testo'][:2000]}.
-REGOLE: Scrivi un commento sarcastico alla Dr. House. Ricorda di impersonare un professore di Farmacia Poi vai a capo e scrivi esattamente "VOTO: X" (dove X è un numero da 1 a 30)."""]
+REGOLE: Scrivi un commento sarcastico alla Dr. House. Ricorda di impersonare un professore di Farmacia Poi vai a capo e scrivi esattamente "VOTO: X" (dove X è un numero da 1 a 30)."""
                                 try:
                                     risposta_prof = genera_testo_gemini(prompt_voto).strip()
                                     
@@ -560,9 +888,6 @@ REGOLE: Scrivi un commento sarcastico alla Dr. House. Ricorda di impersonare un 
                         del st.session_state.id_sfida_attiva
                         st.rerun()
 
-# ==========================================
-# FASE 5: PROFILO RANKED
-# ==========================================
 with tab5:
     st.subheader("🏆 Il Tuo Profilo Ranked")
     st.write("Spremi appunti e vinci sfide nell'Arena per scalare le classifiche dell'Ateneo!")
@@ -647,9 +972,7 @@ with tab5:
         except Exception as e:
             st.error(f"Errore nel caricamento del profilo: {e}")
 
-# ==========================================
-# FASE 6: COMMUNITY
-# ==========================================
+# --- FASE 6: COMMUNITY ---
 with tab6:
     st.subheader("🌍 Community IoImparo - Portale Scambio Appunti")
     st.write("Pubblica i tuoi riassunti migliori e cerca tra quelli degli altri studenti!")
@@ -695,6 +1018,7 @@ with tab6:
                 with st.expander(f"📖 {ap['titolo']} | 🧬 {ap['materia']}"):
                     st.caption("Anteprima del testo:")
                     
+                    # 1. Spacchettiamo il testo per nascondere i tag orribili dall'anteprima
                     testo_salvato = ap['testo_estratto']
                     try:
                         t_trasc = testo_salvato.split("[TRASCRIZIONE]")[1].split("[/TRASCRIZIONE]")[0].strip()
@@ -708,6 +1032,7 @@ with tab6:
                     
                     st.divider()
                     
+                    # 2. Asportazione della Mail e Trapianto del Download Diretto
                     if ap.get('file_pdf_base64'):
                         import base64
                         st.download_button(
@@ -730,23 +1055,22 @@ with tab6:
                         )
         else:
             st.info("Nessun risultato trovato. Sii il primo a pubblicare!")
-
-# ==========================================
-# FASE 7: ARCHIVIO PRIVATO
-# ==========================================
+# --- FASE 7: ARCHIVIO PRIVATO ---
 with tab7:
     st.subheader("🗂️ Il tuo Archivio Privato")
     st.write("Qui trovi i tuoi ultimi 25 appunti privati. Caricando il 26°, il più vecchio verrà eliminato automaticamente.")
     
+    # Li peschiamo ordinandoli dal più NUOVO al più VECCHIO (desc=True)
     miei_archiviati = db_get_miei_appunti(st.session_state.utente_loggato.id, solo_privati=True)
     
     if miei_archiviati.data:
         st.write(f"Hai **{len(miei_archiviati.data)}/25** appunti privati salvati.")
         
         for ap in miei_archiviati.data:
-            data_formattata = ap['created_at'][:10]
+            data_formattata = ap['created_at'][:10] # Prende solo la data YYYY-MM-DD
             with st.expander(f"📄 {ap['titolo']} | 🧬 {ap['materia']} (Creato il: {data_formattata})"):
                 
+                # 1. Spacchettiamo PRIMA di fare qualsiasi cosa
                 testo_salvato = ap['testo_estratto']
                 try:
                     t_trasc = testo_salvato.split("[TRASCRIZIONE]")[1].split("[/TRASCRIZIONE]")[0].strip()
@@ -755,11 +1079,13 @@ with tab7:
                 except:
                     t_trasc, t_schem, t_riass = "", "", testo_salvato
                     
+                # 2. ORA mostriamo a schermo SOLO il riassunto (senza codici!)
                 anteprima = t_riass[:500] if t_riass else t_trasc[:500]
                 st.write(anteprima + "... [Continua nel PDF]")
                 
                 st.divider()
                 
+                # 3. Bottone per scaricare: Originale se esiste, altrimenti generato
                 if ap.get('file_pdf_base64'):
                     st.download_button(
                         label="📩 Scarica File Originale (PDF)", 
@@ -779,3 +1105,4 @@ with tab7:
                     )
     else:
         st.info("Il tuo archivio privato è ancora vuoto. Elabora un PDF nella Fase 1 e salvalo come Privato!")
+
