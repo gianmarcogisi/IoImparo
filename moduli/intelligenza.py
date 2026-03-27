@@ -44,33 +44,21 @@ def chat_professore_gemini(system_prompt, messaggi_chat):
         return "Errore di connessione con il Professore."
 
 def pulisci_codice_mermaid(codice):
-    """
-    PULIZIA BLINDATA ANTI-BOMBA: Rimuove tutto ciò che fa crashare Mermaid.
-    """
+    """PULIZIA BLINDATA ANTI-BOMBA."""
     c = codice.replace("```mermaid", "").replace("```", "").strip()
-    
-    # Mappa per rimuovere gli accenti
     mappa_pulizia = str.maketrans("àèéìòùÀÈÉÌÒÙ", "aeeiouAEEIOU")
     c = c.translate(mappa_pulizia)
     
-    # Salviamo le frecce prima di pulire il resto
     c = c.replace("-->", "FRECCIA_SALVA")
-    
-    # DISTRUZIONE CARATTERI VIETATI (Inclusi i due punti e gli asterischi!)
     c = c.replace('"', " ").replace("'", " ").replace("(", " ").replace(")", " ")
     c = c.replace(":", " ").replace(";", " ").replace("<", " ").replace(">", " ")
     c = c.replace("{", " ").replace("}", " ").replace("*", " ")
-    
-    # Ripristiniamo le frecce
     c = c.replace("FRECCIA_SALVA", "-->")
     
-    # Assicuriamoci che inizi in modo corretto
     if not c.startswith("graph TD"):
         c = "graph TD\n" + c
         
-    # Pulizia spazi vuoti extra
     c = re.sub(r'\n+', '\n', c)
-    
     return c
 
 def cerca_immagine_scientifica(tipo_visuale, query_visuale):
@@ -111,10 +99,10 @@ Devi estrarre e riscrivere OGNI SINGOLO DETTAGLIO. Crea un testo lunghissimo ed 
 
 [SCHEMA]
 Genera codice Mermaid.js valido (graph TD).
-REGOLE ANTI-CRASH (SEVERISSIME):
+REGOLE ANTI-CRASH E DI PROPORZIONE:
 1. Usa SOLO lettere, numeri e spazi dentro le parentesi quadre. Esempio: A[Farmacologia Generale] --> B[Farmacocinetica]
 2. DIVIETO ASSOLUTO DI USARE questi caratteri nei nodi: : ; ' " ( ) [ ] {{ }} *
-3. Niente punteggiatura nei titoli dei nodi.
+3. DESIGN GERARCHICO OBBLIGATORIO: Non creare schemi larghi e piatti. Non collegare mai più di 3 o 4 nodi allo stesso padre! Crea macro-categorie e sotto-categorie per far sviluppare lo schema in profondità e non in larghezza.
 [/SCHEMA]
 
 [RIASSUNTO]
