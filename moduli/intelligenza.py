@@ -102,7 +102,9 @@ Genera codice Mermaid.js valido (graph TD).
 REGOLE ANTI-CRASH E DI PROPORZIONE:
 1. Usa SOLO lettere, numeri e spazi dentro le parentesi quadre. Esempio: A[Farmacologia Generale] --> B[Farmacocinetica]
 2. DIVIETO ASSOLUTO DI USARE questi caratteri nei nodi: : ; ' " ( ) [ ] {{ }} *
-3. DESIGN GERARCHICO OBBLIGATORIO: Non creare schemi larghi e piatti. Non collegare mai più di 3 o 4 nodi allo stesso padre! Crea macro-categorie e sotto-categorie per far sviluppare lo schema in profondità e non in larghezza.
+3. STRUTTURA AD ALBERO PROFONDO: Ogni nodo padre DEVE avere AL MASSIMO 3 nodi figli. È severamente vietato collegare più di 3 frecce allo stesso blocco.
+4. RAGGRUPPAMENTO: Se hai 10 concetti, NON collegarli tutti al titolo principale. Inventa dei nodi intermedi (es. A[Principale] --> B[Fase 1]; A --> C[Fase 2]; B --> D[Dettaglio 1]; B --> E[Dettaglio 2]). Sviluppa verso il basso, non verso i lati.
+5. COLORI E COLLEGAMENTI: Colora concetti attinenti con lo stesso colore, nello schema usa almeno 4 colori diversi e inserisci una parola o un messaggio di massimo 3 parole di collegamento tra i nodi (es.A) La farmacologia B)studia le interazioni C)Tra i farmaci
 [/SCHEMA]
 
 [RIASSUNTO]
