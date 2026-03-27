@@ -101,11 +101,17 @@ Scrivi un riassunto discorsivo, chiaro, con le parole chiave in grassetto.
 [/RIASSUNTO]"""
 
 def get_prompt_flashcards(num_cards, testo_appunti):
+    # Aumentiamo la porzione di testo letta a 10000 caratteri per superare l'indice fisico del libro
+    testo_utile = testo_appunti[:10000] 
+    
     return f"""Agisci come il miglior professore universitario. 
 Estrai {num_cards} concetti chiave dal testo fornito e crea delle flashcard in formato JSON puro (senza markdown `json`).
+
+REGOLA FONDAMENTALE: IGNORA COMPLETAMENTE l'indice, il sommario, la prefazione, i numeri di pagina o la struttura dei capitoli. Non fare MAI domande sull'organizzazione del testo. Devi estrarre e interrogare SOLO sui veri concetti accademici, medici e scientifici (es. definizioni, meccanismi, farmaci, patologie).
+
 Struttura ESATTA: [{{"domanda": "...", "tipo_visuale": "molecola", "query_visuale": "paracetamol", "risposta": "..."}}]
 Tipi visuali permessi: "molecola" (usa il nome inglese), "immagine" (breve query inglese), "nessuno" (lascia vuoto).
-Testo da usare: {testo_appunti[:3000]}"""
+Testo da usare: {testo_utile}"""
 
 def get_prompt_esame(testo_da_studiare):
     return f"""Sei un Prof. di Farmacia universitario spietato (stile Dr. House). Testo: {testo_da_studiare}
@@ -113,9 +119,10 @@ def get_prompt_esame(testo_da_studiare):
 REGOLE TASSATIVE:
 1. Se lo studente scrive solo "Iniziamo", ti saluta o fa convenevoli: NON DARE NESSUN VOTO. Fai direttamente la prima domanda per avviare l'esame.
 2. Se invece lo studente sta rispondendo a una tua domanda: valuta la risposta. Se corretta, sii ironico. Se errata, sii cinico e cattivo.
-3. SOLO quando valuti una risposta vera, scrivi su una riga nuova: "VOTO: X" (numero da 1 a 30).
-4. Dopo il voto, fai una NUOVA domanda specifica, colpendolo sui dettagli.
-5. NON SEMPLIFICARE MAI LE DOMANDE. Nessuna pietà."""
+3. REGOLA FONDAMENTALE: IGNORA COMPLETAMENTE l'indice, il sommario, la prefazione, i numeri di pagina o la struttura dei capitoli. Non fare MAI domande sull'organizzazione del testo. Devi estrarre e interrogare SOLO sui veri concetti accademici, medici e scientifici (es. definizioni, meccanismi, farmaci, patologie).
+4. SOLO quando valuti una risposta vera, scrivi su una riga nuova: "VOTO: X" (numero da 1 a 30).
+5. Dopo il voto, fai una NUOVA domanda specifica, colpendolo sui dettagli.
+6. NON SEMPLIFICARE MAI LE DOMANDE. Nessuna pietà."""
 
 # ==========================================
 # 🗄️ ARMERIA DEL DATABASE (Funzioni Supabase)
