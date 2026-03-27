@@ -2,16 +2,17 @@ import streamlit as st
 import time
 import requests
 import urllib.parse
+import re
 from google import genai
 
 client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
 
-def genera_testo_gemini(prompt):
+def genera_testo_gemini(prompt_list):
     try:
-        response = client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
+        response = client.models.generate_content(model='gemini-2.5-flash', contents=prompt_list)
         return response.text
     except Exception as e:
-        st.error(f"Errore Gemini: {e}")
+        st.error(f"Errore AI: {e}")
         return ""
 
 def chat_professore_gemini(system_prompt, messaggi_chat):
@@ -20,36 +21,34 @@ def chat_professore_gemini(system_prompt, messaggi_chat):
         ruolo = "Professore" if msg["ruolo"] == "assistant" else "Studente"
         prompt_completo += f"{ruolo}: {msg['contenuto']}\n"
     prompt_completo += "Professore: "
-    return genera_testo_gemini(prompt_completo)
+    return genera_testo_gemini([prompt_completo])
 
-def cerca_immagine_scientifica(t_v, q_v_raw):
-    """Il triplo motore di ricerca immagini: PubChem -> Wikipedia -> AI"""
-    if not q_v_raw: return None
-    q_v_url = urllib.parse.quote(q_v_raw)
+def pulisci_codice_mermaid(codice):
+    mappa = str.maketrans("àèéìòùÀÈÉÌÒÙ", "aeeiouAEEIOU")
+    c = codice.translate(mappa).replace("```mermaid", "").replace("```", "").strip()
+    c = c.replace("(", "-").replace(")", "").replace("<", " min ").replace(">", " mag ").replace(";", "")
+    return re.sub(r'\n+', '\n', c)
+
+def cerca_immagine_scientifica(tipo, query):
+    if not query: return None
+    q = urllib.parse.quote(str(query).strip())
     
-    # 1. PubChem (Molecole)
-    if t_v == 'molecola':
-        url = f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/{q_v_url}/PNG"
-        if requests.head(url).status_code == 200: return url
+    if tipo == 'molecola':
+        url = f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/{q}/PNG"
+        try:
+            if requests.head(url, timeout=2).status_code == 200: return url
+        except: pass
 
-    # 2. Wikipedia (Foto reali)
-    wiki_api = f"https://en.wikipedia.org/w/api.php?action=query&titles={q_v_url}&prop=pageimages&format=json&pithumbsize=500&redirects=1"
+    wiki = f"https://en.wikipedia.org/w/api.php?action=query&titles={q}&prop=pageimages&format=json&pithumbsize=500&redirects=1"
     try:
-        res = requests.get(wiki_api).json()
-        pages = res.get("query", {}).get("pages", {})
-        for p_id in pages:
-            if "thumbnail" in pages[p_id]: return pages[p_id]["thumbnail"]["source"]
+        res = requests.get(wiki, timeout=2).json()
+        for p in res.get("query", {}).get("pages", {}).values():
+            if "thumbnail" in p: return p["thumbnail"]["source"]
     except: pass
 
-    # 3. Pollinations (AI Fallback)
-    return f"https://image.pollinations.ai/prompt/{q_v_url}_scientific_illustration?width=512&height=512&nologo=true"
+    return f"https://image.pollinations.ai/prompt/{q}_medical_illustration?width=512&height=512&nologo=true"
 
-# --- PROMPT (Restaurati con i dettagli precedenti) ---
-def get_prompt_mappa(istruzioni):
-    return f"Agisci come assistente universitario... [Dividi in [TRASCRIZIONE], [SCHEMA] (Mermaid graph TD), [RIASSUNTO]]... {istruzioni}"
-
-def get_prompt_flashcards(num, testo):
-    return f"Crea {num} flashcard JSON: domanda, tipo_visuale, query_visuale, risposta. Testo: {testo[:3000]}"
-
-def get_prompt_esame(argomento):
-    return f"Sei il Prof. House spietato. Valuta, dai VOTO: X e fai una nuova domanda difficile. Argomento: {argomento}"
+# PROMPTS
+def get_prompt_mappa(testo): return f"Agisci come assistente... [TRASCRIZIONE], [SCHEMA], [RIASSUNTO]... {testo}"
+def get_prompt_flashcards(n, t): return f"Crea {n} flashcard JSON... {t[:3000]}"
+def get_prompt_esame(t): return f"Sei il Prof. House spietato... {t}"
